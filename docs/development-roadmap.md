@@ -13,8 +13,8 @@ gantt
     section Foundation
     Phase 1: Architecture & Foundation          :done, p1, 2026-11-01, 7d
     section Ingestion & Search
-    Phase 2: Document Processing & Chunking     :active, p2, after p1, 14d
-    Phase 3: Embeddings & pgvector Storage      :p3, after p2, 14d
+    Phase 2: Document Processing & Chunking     :done, p2, after p1, 14d
+    Phase 3: Embeddings & pgvector Storage      :active, p3, after p2, 14d
     Phase 4: Hybrid Retrieval (Vector + BM25)   :p4, after p3, 14d
     section Intelligence & RAG
     Phase 5: Reranking & Context Compression    :p5, after p4, 10d
@@ -29,7 +29,7 @@ gantt
 
 ## Phase Details
 
-### Phase 1: Project Architecture and Foundation (Current)
+### Phase 1: Project Architecture and Foundation (Completed)
 - [x] Monorepo structure with decoupled backend and frontend services.
 - [x] FastAPI application initialization with versioned `/api/v1` routes.
 - [x] SQLAlchemy 2.0 configuration with connection pooling and resilient startup.
@@ -42,19 +42,23 @@ gantt
 
 ---
 
-### Phase 2: Document Processing and Chunking Pipeline
-- Document ingestion endpoints supporting `.pdf`, `.docx`, and `.txt` uploads.
-- Text extraction with layout awareness (headers, tables, paragraphs, page numbers).
-- Preprocessing and normalization pipeline (whitespace, encoding, header/footer cleaning).
-- Chunking strategies:
-  - Recursive character chunking with configurable overlap.
-  - Sentence-aware semantic boundary chunking.
-  - Metadata preservation (document ID, page number, section title, character offsets).
-- Document and chunk database schemas.
+### Phase 2: Document Processing and Chunking Pipeline (Completed)
+- [x] Versioned REST API endpoints (`/api/v1/documents`) for upload, paginated listing, detail inspection, chunk retrieval, and cascading deletion.
+- [x] Multi-tier validation: extension whitelist, binary magic byte verification (`%PDF-`, OpenXML ZIP headers), decodable text verification, and configurable 25 MB upload size limits.
+- [x] Local filesystem storage service under isolated `storage/documents` with collision-proof UUID naming and path traversal protection (`os.path.commonpath`).
+- [x] Format-specific extraction modules:
+  - **PDF**: PyMuPDF page-by-page extraction with exact page provenance and blank page skipping.
+  - **DOCX**: python-docx sequential paragraph and table extraction preserving structural boundaries without artificial page fabrication.
+  - **TXT**: Resilient text decoding with UTF-8, Latin-1, and CP1252 fallbacks.
+- [x] Conservative preprocessing: line ending normalization, hyphenated line-wrap repair, typesetting ligature unfolding, whitespace collapsing, and complete preservation of punctuation, numbers, and symbols.
+- [x] Deterministic semantic chunking: character-based sizing (1500 chars ≈ 375 tokens, 200 overlap ≈ 50 tokens), semantic boundary hierarchy (`\n\n`, `[.!?]\s+`, `\s+`), loop safety guards (`step >= 1`), and provenance retention (`page_start`/`page_end` for PDF; `paragraph_start`/`paragraph_end` for DOCX/TXT).
+- [x] Relational persistence with SQLAlchemy 2.0 `Document` and `Chunk` models, unique index `(document_id, chunk_index)`, `ON DELETE CASCADE` foreign keys, and Alembic migration `0002_create_documents_and_chunks.py`.
+- [x] React frontend Documents interface with drag-and-drop upload, size/type client validation, processing feedback, status badges, chunk inspection modal, and delete confirmation dialogs.
+- [x] Comprehensive test suites: 44 automated backend pytest tests and 15 frontend Vitest tests covering all failure, validation, extraction, chunking, and deletion flows.
 
 ---
 
-### Phase 3: Embedding Generation and Vector Storage
+### Phase 3: Embedding Generation and Vector Storage (Planned)
 - Text embedding generation service supporting Hugging Face / Sentence-Transformers (e.g., `BAAI/bge-large-en-v1.5`) and OpenAI embeddings.
 - pgvector integration with SQLAlchemy:
   - Vector column definitions (`Vector(dim)`).

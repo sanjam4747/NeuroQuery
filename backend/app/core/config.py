@@ -1,5 +1,6 @@
 """Centralized application configuration management via pydantic-settings."""
 
+from pathlib import Path
 from typing import Any, List, Union
 from pydantic import AnyHttpUrl, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -53,6 +54,26 @@ class Settings(BaseSettings):
     DB_MAX_OVERFLOW: int = 10
     DB_POOL_PRE_PING: bool = True
     DB_CONNECT_TIMEOUT_SECONDS: float = 2.0
+
+    # Document Storage & Ingestion Settings (Phase 2)
+    STORAGE_DIR: str = "storage/documents"
+    MAX_UPLOAD_SIZE_BYTES: int = 25 * 1024 * 1024  # 25 MB default limit
+    ALLOWED_EXTENSIONS: List[str] = [".pdf", ".docx", ".txt"]
+
+    # Chunking Configuration (Phase 2)
+    # Character-based sliding window with sentence/paragraph boundary preference.
+    # 1500 chars ≈ 350-400 words/tokens; 200 chars overlap ≈ 45-50 words/tokens.
+    CHUNK_SIZE: int = 1500
+    CHUNK_OVERLAP: int = 200
+
+    def get_storage_path(self) -> Path:
+        """Resolve storage path safely and ensure target directory exists."""
+        path = Path(self.STORAGE_DIR)
+        if not path.is_absolute():
+            backend_root = Path(__file__).resolve().parent.parent.parent
+            path = (backend_root / path).resolve()
+        path.mkdir(parents=True, exist_ok=True)
+        return path
 
     @property
     def sync_database_url(self) -> str:

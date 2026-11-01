@@ -34,7 +34,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ health, isOpen, onClose }) => 
       label: 'Documents',
       icon: FileText,
       phase: 'Phase 2',
-      activeStatus: 'Planned',
+      activeStatus: 'Active',
     },
     {
       to: '/assistant',
@@ -102,7 +102,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ health, isOpen, onClose }) => 
 
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isPhase1 = item.phase === 'Phase 1';
+            const isPhaseActive = item.phase === 'Phase 1' || item.phase === 'Phase 2';
 
             return (
               <NavLink
@@ -125,7 +125,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ health, isOpen, onClose }) => 
                 <div className="flex items-center gap-1">
                   <span
                     className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
-                      isPhase1
+                      isPhaseActive
                         ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
                         : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
                     }`}

@@ -28,3 +28,50 @@ export interface PlannedFeature {
   status: 'completed' | 'in-progress' | 'planned';
   category: 'Ingestion' | 'Retrieval' | 'Generation' | 'Analysis' | 'Evaluation';
 }
+
+// ==============================================================================
+// Phase 2 Document & Chunk Models
+// ==============================================================================
+
+export type DocumentStatus = 'uploaded' | 'processing' | 'completed' | 'failed';
+
+export interface DocumentItem {
+  id: string;
+  filename: string;
+  original_filename: string;
+  file_type: 'pdf' | 'docx' | 'txt' | string;
+  file_size: number;
+  status: DocumentStatus;
+  total_pages: number | null;
+  total_characters: number;
+  total_chunks: number;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DocumentListResponse {
+  items: DocumentItem[];
+  total: number;
+  skip: number;
+  limit: number;
+}
+
+export interface ChunkItem {
+  id: string;
+  document_id: string;
+  chunk_index: number;
+  text: string;
+  character_count: number;
+  page_start: number | null;
+  page_end: number | null;
+  metadata_json: Record<string, any>;
+  created_at: string;
+}
+
+export interface ChunkListResponse {
+  items: ChunkItem[];
+  total: number;
+  skip: number;
+  limit: number;
+}

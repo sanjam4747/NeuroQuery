@@ -5,5 +5,15 @@ from app.schemas.health import (
     HealthCheckResponse,
     ApiRootInfo,
 )
+from app.schemas.document import DocumentResponse, DocumentListResponse
+from app.schemas.chunk import ChunkResponse, ChunkListResponse
 
-__all__ = ["DatabaseHealth", "HealthCheckResponse", "ApiRootInfo"]
+__all__ = [
+    "DatabaseHealth",
+    "HealthCheckResponse",
+    "ApiRootInfo",
+    "DocumentResponse",
+    "DocumentListResponse",
+    "ChunkResponse",
+    "ChunkListResponse",
+]

@@ -41,7 +41,7 @@ export const Dashboard: React.FC = () => {
       title: 'Document Ingestion & Chunking',
       phase: 'Phase 2',
       description: 'PDF, DOCX, and TXT parsing, layout-aware normalization, and semantic sliding-window chunking.',
-      status: 'planned',
+      status: 'completed',
       category: 'Ingestion',
     },
     {
@@ -109,7 +109,7 @@ export const Dashboard: React.FC = () => {
           <div className="mt-6 flex flex-wrap items-center gap-4 text-xs font-mono text-slate-400">
             <div className="flex items-center gap-1.5 bg-white/5 px-2.5 py-1 rounded-md border border-white/10">
               <GitBranch className="w-3.5 h-3.5 text-brand-400" />
-              <span>Current: Phase 1 (Foundation)</span>
+              <span>Current: Phase 2 (Document Processing & Chunking)</span>
             </div>
             <div className="flex items-center gap-1.5 bg-white/5 px-2.5 py-1 rounded-md border border-white/10">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
@@ -199,7 +199,8 @@ export const Dashboard: React.FC = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {plannedFeatures.map((feat) => {
-            const isCurrent = feat.phase === 'Phase 1';
+            const isCompleted = feat.status === 'completed';
+            const isCurrent = feat.phase === 'Phase 2';
             return (
               <div
                 key={feat.phase}
@@ -236,12 +237,12 @@ export const Dashboard: React.FC = () => {
                   <span className="text-slate-500 dark:text-slate-400">Status</span>
                   <span
                     className={`font-medium ${
-                      isCurrent
+                      isCompleted
                         ? 'text-emerald-600 dark:text-emerald-400'
                         : 'text-slate-400'
                     }`}
                   >
-                    {isCurrent ? 'Implemented & Verified' : 'Roadmap Milestone'}
+                    {isCompleted ? 'Implemented & Verified' : 'Roadmap Milestone'}
                   </span>
                 </div>
               </div>

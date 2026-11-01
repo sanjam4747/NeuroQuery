@@ -1,10 +1,19 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from '../App';
 import { healthService } from '../services/healthService';
+import { documentService } from '../services/documentService';
 
 describe('App Integration', () => {
+  beforeEach(() => {
+    vi.spyOn(documentService, 'getDocuments').mockResolvedValue({
+      items: [],
+      total: 0,
+      skip: 0,
+      limit: 50,
+    });
+  });
   it('renders application branding, sidebar navigation, and dashboard overview', async () => {
     vi.spyOn(healthService, 'getHealth').mockResolvedValueOnce({
       status: 'healthy',
@@ -22,7 +31,7 @@ describe('App Integration', () => {
     // Brand and hero checks
     expect(screen.getAllByText('NeuroQuery').length).toBeGreaterThan(0);
     expect(screen.getByText('Document Intelligence Platform')).toBeInTheDocument();
-    expect(screen.getByText('Current: Phase 1 (Foundation)')).toBeInTheDocument();
+    expect(screen.getByText('Current: Phase 2 (Document Processing & Chunking)')).toBeInTheDocument();
 
     // Check navigation links
     expect(screen.getAllByText('Documents').length).toBeGreaterThan(0);
@@ -31,20 +40,20 @@ describe('App Integration', () => {
     expect(screen.getAllByText('Evaluation Lab').length).toBeGreaterThan(0);
   });
 
-  it('navigates to placeholder page when clicking on sidebar links', async () => {
+  it('navigates to documents page when clicking on sidebar links', async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    const docsLink = screen.getByText('Documents');
+    const docsLink = screen.getAllByText('Documents')[0];
     await user.click(docsLink);
 
     expect(
-      screen.getByText('Document Ingestion & Management')
+      screen.getByText('Document Ingestion & Chunking')
     ).toBeInTheDocument();
-    expect(screen.getByText('Phase 2 Milestone')).toBeInTheDocument();
+    expect(screen.getByText('Phase 2 Active')).toBeInTheDocument();
 
     // Click back to Dashboard
-    const backBtn = screen.getByText('Back to Dashboard');
+    const backBtn = screen.getAllByText('Dashboard')[0];
     await user.click(backBtn);
 
     expect(screen.getByText('System Infrastructure & Telemetry')).toBeInTheDocument();

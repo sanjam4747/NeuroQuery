@@ -11,7 +11,7 @@
 **NeuroQuery** is an end-to-end NLP-powered document research and intelligence platform. It provides document parsing, semantic chunking, high-dimensional vector embeddings, hybrid retrieval (dense vector similarity + sparse BM25 keyword matching), cross-encoder reranking, and document-grounded question answering (RAG) with verifiable citations, multi-document contradiction detection, and retrieval evaluation.
 
 > [!NOTE]
-> **Current Status**: **Phase 1 — Project Architecture & Foundation** is complete. Future NLP and RAG capabilities will be introduced iteratively in subsequent phases according to the [Development Roadmap](docs/development-roadmap.md).
+> **Current Status**: **Phase 2 — Document Processing & Chunking Pipeline** is complete and practically verified. Future vector embedding and RAG capabilities will be introduced iteratively in subsequent phases according to the [Development Roadmap](docs/development-roadmap.md).
 
 ---
 
@@ -168,13 +168,13 @@ This launches a PostgreSQL 16 container with `pgvector` pre-installed on port `5
 ## Running Automated Tests
 
 ### Backend Tests (Pytest)
-Run all 8 automated tests (API root, configuration, database degraded/healthy state handling):
+Run all 45 automated unit and integration tests (validation, extractors, preprocessing, chunking, word boundary snapping, storage security, pipeline orchestrator, API endpoints, health & config):
 ```powershell
 backend\.venv\Scripts\pytest backend/tests -v
 ```
 
 ### Frontend Tests (Vitest)
-Run all 9 automated component and integration tests:
+Run all 15 automated component and integration tests (Documents page, chunk inspector modal, file validation, navigation, health status badge):
 ```powershell
 cd frontend
 npm test
@@ -189,9 +189,36 @@ npm run build
 
 ---
 
+## Configuration Variables
+
+Configured in `backend/.env` with safe fallbacks in `backend/app/core/config.py`:
+
+| Variable | Default Value | Description |
+| :--- | :--- | :--- |
+| `STORAGE_DIR` | `storage/documents` | Directory where uploaded files are stored locally on disk. |
+| `MAX_UPLOAD_SIZE_BYTES` | `26214400` (25 MB) | Maximum permitted file upload size. |
+| `ALLOWED_EXTENSIONS` | `[".pdf", ".docx", ".txt"]` | Whitelist of supported file extensions. |
+| `CHUNK_SIZE` | `1500` | Target chunk size in characters (~375 tokens). |
+| `CHUNK_OVERLAP` | `200` | Overlap between consecutive chunks in characters (~50 tokens). |
+| `DATABASE_URL` | `postgresql+psycopg://...` | Connection URI for PostgreSQL with pgvector. |
+
+---
+
 ## API Specifications
 
-### `GET /api/v1/health`
+### Document Processing Endpoints (`/api/v1/documents`)
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `POST` | `/api/v1/documents` | Ingests a document (`.pdf`, `.docx`, `.txt`), validates magic bytes, extracts text, normalizes content, chunks deterministically, and persists to DB and local disk. |
+| `GET` | `/api/v1/documents` | Retrieves a paginated list of ingested documents (`skip`, `limit`, optional `status` filter). |
+| `GET` | `/api/v1/documents/{id}` | Retrieves metadata and processing metrics for a single document. (Storage paths are never exposed). |
+| `GET` | `/api/v1/documents/{id}/chunks` | Retrieves paginated chunks with provenance (`page_start`/`page_end` for PDF, paragraph index for DOCX/TXT). |
+| `DELETE` | `/api/v1/documents/{id}` | Permanently deletes the document record, cascades to all generated chunks, and removes the file from disk. |
+
+### Health Check Endpoint
+
+#### `GET /api/v1/health`
 Probes API operational state, PostgreSQL connection, and pgvector extension availability.
 
 **Degraded Response (Database Offline)**:
@@ -231,7 +258,7 @@ Probes API operational state, PostgreSQL connection, and pgvector extension avai
 | Phase | Milestone | Status |
 | :---: | :--- | :---: |
 | **1** | **Project Architecture & Foundation** | **Completed** |
-| 2 | Document Ingestion & Chunking Pipeline | Planned |
+| **2** | **Document Processing & Chunking Pipeline** | **Completed** |
 | 3 | Embedding Generation & pgvector Storage | Planned |
 | 4 | Hybrid Retrieval Engine (Vector + BM25) | Planned |
 | 5 | Cross-Encoder Reranking & Context Compression | Planned |

@@ -16,6 +16,15 @@ from app.schemas.retrieval import (
     RetrievalInfoResponse,
     RebuildIndexResponse,
 )
+from app.schemas.rag import (
+    RAGQueryRequest,
+    RAGQueryResponse,
+    RAGCitationItem,
+    RAGClaimItem,
+    RAGGenerationMetadata,
+    RAGDiagnostics,
+    RAGHealthResponse,
+)
 
 __all__ = [
     "DatabaseHealth",
@@ -33,5 +42,12 @@ __all__ = [
     "RetrievalQueryResponse",
     "RetrievalInfoResponse",
     "RebuildIndexResponse",
+    "RAGQueryRequest",
+    "RAGQueryResponse",
+    "RAGCitationItem",
+    "RAGClaimItem",
+    "RAGGenerationMetadata",
+    "RAGDiagnostics",
+    "RAGHealthResponse",
 ]
 

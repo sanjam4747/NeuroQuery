@@ -86,6 +86,20 @@ class Settings(BaseSettings):
     ENABLE_RERANKING: bool = True
     DENSE_SIMILARITY_THRESHOLD: Union[float, None] = None  # None = disabled
 
+    # Generation & RAG Orchestration Settings (Phase 5)
+    LLM_PROVIDER: str = "ollama"  # "ollama", "mock"
+    LLM_BASE_URL: str = "http://localhost:11434"
+    LLM_MODEL_NAME: str = "qwen2.5:1.5b-instruct"
+    LLM_REQUEST_TIMEOUT_SECONDS: float = 60.0
+    LLM_TEMPERATURE: float = 0.0  # Factual, deterministic grounding
+    LLM_MAX_OUTPUT_TOKENS: int = 1024
+    LLM_MAX_CONCURRENT_REQUESTS: int = 2
+    LLM_CONTEXT_WINDOW_TOKENS: int = 4096  # Total model context capacity (system + question + evidence + output)
+    RAG_CONTEXT_MAX_TOKENS: int = 2048    # Maximum ceiling reserved specifically for evidence passages
+    RAG_MAX_EVIDENCE_CHUNKS: int = 5      # Top reranked passages selected for context
+    RAG_SIMILARITY_OVERLAP_THRESHOLD: float = 0.85  # Deduplication cutoff for redundant passages
+    RAG_ENABLE_STRUCTURED_OUTPUT: bool = True
+
 
 
     def get_storage_path(self) -> Path:

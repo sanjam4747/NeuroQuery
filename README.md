@@ -11,7 +11,7 @@
 **NeuroQuery** is an end-to-end NLP-powered document research and intelligence platform. It provides document parsing, semantic chunking, high-dimensional vector embeddings, hybrid retrieval (dense vector similarity + sparse BM25 keyword matching), cross-encoder reranking, and document-grounded question answering (RAG) with verifiable citations, multi-document contradiction detection, and retrieval evaluation.
 
 > [!NOTE]
-> **Current Status**: **Phase 4 — Hybrid Retrieval Engine & Relevance Evaluation** is complete and practically verified. The retrieval engine combines dense semantic search (`BAAI/bge-small-en-v1.5`, 384d, pgvector cosine search), sparse lexical retrieval (`LuceneBM25` with non-negative Robertson IDF), Reciprocal Rank Fusion ($k=60$), and Cross-Encoder reranking (`cross-encoder/ms-marco-MiniLM-L-6-v2`), achieving 100% recall across our reproducible 32-query benchmark evaluation suite. Detailed in [docs/architecture.md](docs/architecture.md).
+> **Current Status**: **Phase 5 — Production-Quality Retrieval-Augmented Generation (RAG)** is complete and practically verified. The assistant pipeline coordinates query normalization, scope resolution, hybrid retrieval (`bge-small-en-v1.5` + `LuceneBM25`), cross-encoder reranking (`ms-marco-MiniLM-L-6-v2`), token-aware context budgeting, strict exclusive grounding with prompt-injection defense, pluggable LLM inference (`OllamaProvider` + `MockLLMProvider`), and structured citation provenance validation (`invalid_citation_ids` tracking). Evaluated against 32 queries with 100% citation validity and 0% harmful abstention. Detailed in [docs/architecture.md](docs/architecture.md).
 
 ---
 
@@ -275,6 +275,70 @@ Probes API operational state, PostgreSQL connection, and pgvector extension avai
 }
 ```
 
+### Assistant Question Answering (`POST /api/v1/assistant/ask`)
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/assistant/ask \
+  -H "Content-Type: application/json" \
+  -d '{
+    "question": "What is pgvector cosine distance?",
+    "top_k": 5,
+    "enable_reranking": true
+  }'
+```
+
+**Example Response**:
+```json
+{
+  "question": "What is pgvector cosine distance?",
+  "answer": "pgvector provides vector similarity search using cosine distance, calculated as 1 minus cosine similarity [S1].",
+  "is_answered": true,
+  "claims": [
+    {
+      "claim_text": "pgvector provides vector similarity search using cosine distance",
+      "citation_ids": ["S1"],
+      "citations": [
+        {
+          "source_id": "S1",
+          "chunk_id": "c76b92a4-44df-4eb9-a316-2fae2e5ecdb2",
+          "document_id": "d1396a83-a44f-4d94-8aa4-477cf895c1a7",
+          "filename": "pgvector_guide.pdf",
+          "page_start": 1,
+          "page_end": 1,
+          "text_snippet": "pgvector allows vector similarity queries via cosine distance...",
+          "dense_score": 0.892,
+          "bm25_score": 14.5,
+          "rrf_score": 0.033,
+          "reranker_score": 5.21,
+          "final_rank": 1
+        }
+      ]
+    }
+  ],
+  "citations": [...],
+  "evidence_sources": [...],
+  "insufficient_evidence_reason": null,
+  "invalid_citation_ids": [],
+  "retrieval_metadata": { "latency_ms": 112.5 },
+  "generation_metadata": {
+    "provider": "ollama",
+    "model": "qwen2.5:1.5b-instruct",
+    "generation_latency_ms": 195.4
+  },
+  "diagnostics": {
+    "query_validation_ms": 0.8,
+    "retrieval_latency_ms": 112.5,
+    "context_building_ms": 1.4,
+    "inference_latency_ms": 195.4,
+    "citation_validation_ms": 0.6,
+    "total_latency_ms": 310.7,
+    "evidence_chunks_retrieved": 5,
+    "evidence_chunks_selected": 2,
+    "context_tokens_used": 280
+  }
+}
+```
+
 ---
 
 ## Development Roadmap
@@ -285,9 +349,9 @@ Probes API operational state, PostgreSQL connection, and pgvector extension avai
 | **2** | **Document Processing & Chunking Pipeline** | **Completed** |
 | **3** | **Embedding Generation & pgvector Storage** | **Completed** |
 | **4** | **Hybrid Retrieval Engine & Relevance Evaluation** | **Completed** |
-| 5 | Cross-Encoder Context Optimization & Token Compression | Planned |
-| 6 | Grounded RAG & Verifiable Citations | Planned |
-| 7 | Multi-Document Comparison & Contradictions | Planned |
+| **5** | **Production-Quality Retrieval-Augmented Generation (RAG)** | **Completed** |
+| 6 | Multi-Document Comparison & Contradictions | Planned |
+| 7 | Advanced Synthesis & Contradiction Detection | Planned |
 | 8 | Evaluation Lab & Observability Metrics | Planned |
 | 9 | Production Hardening, Authentication & CI/CD | Planned |
 

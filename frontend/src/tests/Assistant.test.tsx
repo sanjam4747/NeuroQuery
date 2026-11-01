@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AssistantPage } from '../pages/Assistant';
 import { retrievalService } from '../services/retrievalService';
+import { assistantService } from '../services/assistantService';
 import { documentService } from '../services/documentService';
 
 describe('AssistantPage Search Integration', () => {
@@ -206,5 +207,173 @@ describe('AssistantPage Search Integration', () => {
     await user.click(screen.getByRole('button', { name: /search/i }));
 
     expect(await screen.findByText(/No matching document chunks found/i)).toBeInTheDocument();
+  });
+
+  it('renders grounded RAG answer with citation chips and claim breakdown', async () => {
+    const user = userEvent.setup();
+    const mockAsk = vi.spyOn(assistantService, 'ask').mockResolvedValueOnce({
+      question: 'What is pgvector used for?',
+      answer: 'pgvector provides vector similarity search capabilities with HNSW indexing [S1].',
+      is_answered: true,
+      claims: [
+        {
+          claim_text: 'pgvector provides vector similarity search capabilities with HNSW indexing.',
+          citation_ids: ['S1'],
+          citations: [
+            {
+              source_id: 'S1',
+              chunk_id: 'chunk-101',
+              document_id: 'doc-123',
+              filename: 'pgvector_guide.pdf',
+              page_start: 1,
+              page_end: 1,
+              text_snippet: 'pgvector provides vector similarity search capabilities with HNSW indexing.',
+              dense_score: 0.89,
+              bm25_score: 12.5,
+              rrf_score: 0.033,
+              reranker_score: 5.12,
+              final_rank: 1,
+            },
+          ],
+        },
+      ],
+      citations: [
+        {
+          source_id: 'S1',
+          chunk_id: 'chunk-101',
+          document_id: 'doc-123',
+          filename: 'pgvector_guide.pdf',
+          page_start: 1,
+          page_end: 1,
+          text_snippet: 'pgvector provides vector similarity search capabilities with HNSW indexing.',
+          dense_score: 0.89,
+          bm25_score: 12.5,
+          rrf_score: 0.033,
+          reranker_score: 5.12,
+          final_rank: 1,
+        },
+      ],
+      evidence_sources: [
+        {
+          source_id: 'S1',
+          chunk_id: 'chunk-101',
+          document_id: 'doc-123',
+          filename: 'pgvector_guide.pdf',
+          page_start: 1,
+          page_end: 1,
+          text_snippet: 'pgvector provides vector similarity search capabilities with HNSW indexing.',
+          dense_score: 0.89,
+          bm25_score: 12.5,
+          rrf_score: 0.033,
+          reranker_score: 5.12,
+          final_rank: 1,
+        },
+      ],
+      insufficient_evidence_reason: null,
+      invalid_citation_ids: [],
+      retrieval_metadata: {
+        dense_candidates: 5,
+        bm25_candidates: 5,
+        fused_candidates: 5,
+        reranked_candidates: 5,
+        returned_results: 1,
+        reranking_enabled: true,
+        latency_ms: 45.0,
+      },
+      generation_metadata: {
+        provider: 'ollama',
+        model: 'qwen2.5:1.5b-instruct',
+        prompt_tokens: 220,
+        completion_tokens: 35,
+        total_tokens: 255,
+        generation_latency_ms: 180.0,
+      },
+      diagnostics: {
+        query_validation_ms: 0.8,
+        retrieval_latency_ms: 45.0,
+        context_building_ms: 1.2,
+        inference_latency_ms: 180.0,
+        citation_validation_ms: 0.5,
+        total_latency_ms: 227.5,
+        evidence_chunks_retrieved: 5,
+        evidence_chunks_selected: 1,
+        context_tokens_used: 220,
+      },
+    });
+
+    render(<AssistantPage />);
+
+    const input = screen.getByPlaceholderText(/Enter natural-language query/i);
+    await user.type(input, 'What is pgvector used for?');
+    await user.click(screen.getByRole('button', { name: /search/i }));
+
+    await waitFor(() => {
+      expect(mockAsk).toHaveBeenCalledWith({
+        question: 'What is pgvector used for?',
+        top_k: 5,
+        document_ids: null,
+        enable_reranking: true,
+      });
+    });
+
+    // Check Grounded Answer card
+    expect(await screen.findByText('Grounded Answer')).toBeInTheDocument();
+    expect(screen.getByText(/pgvector provides vector similarity search capabilities with HNSW indexing \[S1\]/i)).toBeInTheDocument();
+
+    // Check Citation chips
+    expect(screen.getByRole('button', { name: /\[S1\] pgvector_guide\.pdf \(p\. 1\)/i })).toBeInTheDocument();
+
+    // Check Claim Breakdown
+    expect(screen.getByText('Factual Claims Breakdown')).toBeInTheDocument();
+    expect(screen.getAllByText(/pgvector provides vector similarity search capabilities with HNSW indexing\./i).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('renders abstention UI when evidence is insufficient', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(assistantService, 'ask').mockResolvedValueOnce({
+      question: 'What is the recipe for Mars soil?',
+      answer: 'The supplied document collection contains no evidence regarding Mars soil recipes.',
+      is_answered: false,
+      claims: [],
+      citations: [],
+      evidence_sources: [],
+      insufficient_evidence_reason: 'No retrieved document contains information related to Mars soil recipes.',
+      invalid_citation_ids: [],
+      retrieval_metadata: {
+        dense_candidates: 0,
+        bm25_candidates: 0,
+        fused_candidates: 0,
+        reranked_candidates: 0,
+        returned_results: 0,
+        reranking_enabled: true,
+        latency_ms: 12.0,
+      },
+      generation_metadata: {
+        provider: 'ollama',
+        model: 'qwen2.5:1.5b-instruct',
+        generation_latency_ms: 0.0,
+      },
+      diagnostics: {
+        query_validation_ms: 0.5,
+        retrieval_latency_ms: 12.0,
+        context_building_ms: 0.1,
+        inference_latency_ms: 0.0,
+        citation_validation_ms: 0.1,
+        total_latency_ms: 12.7,
+        evidence_chunks_retrieved: 0,
+        evidence_chunks_selected: 0,
+        context_tokens_used: 0,
+      },
+    });
+
+    render(<AssistantPage />);
+
+    const input = screen.getByPlaceholderText(/Enter natural-language query/i);
+    await user.type(input, 'What is the recipe for Mars soil?');
+    await user.click(screen.getByRole('button', { name: /search/i }));
+
+    expect(await screen.findByText('Insufficient Evidence')).toBeInTheDocument();
+    expect(screen.getByText(/contains no evidence regarding Mars soil recipes/i)).toBeInTheDocument();
+    expect(screen.getByText(/No retrieved document contains information related to Mars soil recipes/i)).toBeInTheDocument();
   });
 });

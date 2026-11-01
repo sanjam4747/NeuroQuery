@@ -12,6 +12,8 @@ from app.services.bm25_retrieval import bm25_service, BM25Service, BM25Candidate
 from app.services.rrf import rrf_service, RRFService, HybridCandidate
 from app.services.reranker import reranker_service, RerankerService, RerankedCandidate
 from app.services.retrieval import retrieval_service, RetrievalService
+from app.services.rag import rag_orchestrator, RAGOrchestrator
+from app.services.llm import get_llm_provider, LLMProvider
 
 __all__ = [
     "check_database_health",
@@ -41,5 +43,9 @@ __all__ = [
     "RerankedCandidate",
     "retrieval_service",
     "RetrievalService",
+    "rag_orchestrator",
+    "RAGOrchestrator",
+    "get_llm_provider",
+    "LLMProvider",
 ]
 

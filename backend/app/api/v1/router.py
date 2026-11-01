@@ -6,6 +6,7 @@ from app.api.v1.endpoints.root import router as root_router
 from app.api.v1.endpoints.documents import router as documents_router
 from app.api.v1.endpoints.embeddings import router as embeddings_router
 from app.api.v1.endpoints.retrieval import router as retrieval_router
+from app.api.v1.endpoints.assistant import router as assistant_router
 
 api_router = APIRouter()
 
@@ -15,5 +16,6 @@ api_router.include_router(health_router, tags=["Health"])
 api_router.include_router(documents_router)
 api_router.include_router(embeddings_router)
 api_router.include_router(retrieval_router)
+api_router.include_router(assistant_router)
 
 

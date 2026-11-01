@@ -15,12 +15,12 @@ gantt
     section Ingestion & Search
     Phase 2: Document Processing & Chunking     :done, p2, after p1, 14d
     Phase 3: Embeddings & pgvector Storage      :done, p3, after p2, 14d
-    Phase 4: Hybrid Retrieval (Vector + BM25)   :active, p4, after p3, 14d
+    Phase 4: Hybrid Retrieval (Vector + BM25)   :done, p4, after p3, 14d
     section Intelligence & RAG
-    Phase 5: Reranking & Context Compression    :p5, after p4, 10d
-    Phase 6: Grounded RAG & Citations           :p6, after p5, 14d
+    Phase 5: Production-Quality RAG & Citations :done, p5, after p4, 14d
+    Phase 6: Multi-Doc Comparison & Conflicts   :p6, after p5, 14d
     section Advanced Capabilities
-    Phase 7: Multi-Doc Comparison & Conflicts   :p7, after p6, 14d
+    Phase 7: Advanced Synthesis & Contradictions:p7, after p6, 14d
     Phase 8: Evaluation Lab & Telemetry         :p8, after p7, 14d
     Phase 9: Production Hardening & Auth        :p9, after p8, 14d
 ```
@@ -63,7 +63,7 @@ gantt
 - [x] L2 unit-norm vector normalization (`normalize_embeddings=True`) for exact cosine similarity.
 - [x] Tokenizer sequence length analysis (512 token limit) and oversize chunk token auditing with warnings.
 - [x] Thread-safe `EmbeddingService` singleton with lazy loading, CPU/CUDA hardware detection, and batching (`EMBEDDING_BATCH_SIZE=32`).
-- [x] PostgreSQL + `pgvector` persistence via `Vector(384)` column on `chunks`, model tracking, and timestamping.
+- [x] PostgreSQL + `pgvector` persistence schema via `Vector(384)` column on `chunks`, model tracking, and timestamping (verified via SQLite fallback & mocks; live PostgreSQL container unexecuted).
 - [x] Document-level embedding tracking (`embedding_status`, `total_embedded_chunks`, `embedding_error`).
 - [x] Alembic migration `0003_add_chunk_embeddings.py` adding vector columns and conditional HNSW cosine index (`vector_cosine_ops`).
 - [x] Ingestion pipeline extension ensuring atomic vector generation before document completion.
@@ -97,11 +97,39 @@ gantt
 
 ---
 
-### Phase 5: Reranking and Context Optimization
-- Cross-encoder reranking service (e.g., `bge-reranker-large` / Cohere Rerank API).
-- Dynamic context window budgeting to prevent context overflow.
-- Redundant passage deduplication and filtering.
-- Context window compression to focus LLM attention on highest-relevance tokens.
+### Phase 5: Production-Quality Retrieval-Augmented Generation (RAG) (Completed)
+- [x] Dedicated RAG Orchestration Layer (`RAGOrchestrator`) coordinating the pipeline: query validation, scope resolution, hybrid retrieval, cross-encoder reranking, context engineering, prompt assembly, LLM inference, structured output parsing, and citation validation.
+- [x] Pluggable Inference Provider Abstraction (`LLMProvider`):
+  - `OllamaProvider`: Async HTTP client with semaphore concurrency limiting, timeout protection, model tags inspection, and structured JSON formatting.
+  - `MockLLMProvider`: Deterministic provider with controllable fault simulation for zero-dependency CI/CD testing.
+  - `LLMProviderFactory`: Environment-configurable provider instantiator (`LLM_PROVIDER`, `LLM_MODEL_NAME`, `LLM_BASE_URL`).
+- [x] Token-Aware Context Engineering (`ContextBuilder`):
+  - Word-level Jaccard similarity deduplication (`RAG_SIMILARITY_OVERLAP_THRESHOLD=0.85`).
+  - Conservative token budgeting (3.8 char/token ratio) reserving headroom for system prompts and model completion.
+  - Sequential source identifier assignment (`[S1]`, `[S2]`) with XML-style delimiter boundary framing.
+- [x] Grounded Prompt Construction (`PromptBuilder`):
+  - Strict exclusive evidence grounding instructions.
+  - Explicit indirect prompt injection defense treating document content as untrusted data.
+  - Schema-constrained JSON instructions.
+- [x] Structured Answer Generation & Robust Parser (`CitationValidator`):
+  - Pydantic schema validation (`answer`, `claims`, `is_answered`, `insufficient_evidence_reason`).
+  - Markdown fence stripper and plain text fallback parsing.
+  - Strict rejection of hallucinated citation tags (`invalid_citation_ids`).
+  - Provenance enrichment attaching database page numbers, chunk IDs, and technical retrieval scores.
+- [x] Versioned REST API Endpoints:
+  - `POST /api/v1/assistant/ask`: End-to-end question answering with diagnostics and latency breakdown.
+  - `GET /api/v1/assistant/health`: LLM inference provider reachability and health telemetry.
+- [x] RAG Evaluation Framework (`app.evaluation.rag_eval`):
+  - Measures Citation Validity Rate (100%), Precision (92.59%), Recall (90.74%), Correct Abstention Rate (60.00%), and Harmful Abstention Rate (0.00%).
+- [x] React Frontend Integration:
+  - Unified search & Q&A query bar with toggleable RAG generation.
+  - Grounded answer presentation with status indicators and abstention alert banners.
+  - Interactive citation badges linking claims directly to source passages.
+  - Claim breakdown list and collapsible technical retrieval score inspector.
+- [x] Automated Test Suites:
+  - 119 backend pytest tests (100% pass rate).
+  - 24 frontend Vitest tests (100% pass rate).
+  - Zero TypeScript build errors on `npm run build`.
 
 ---
 

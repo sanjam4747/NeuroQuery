@@ -1,0 +1,22 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: neuroquery-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-neuroquery}
+      POSTGRES_USER: ${POSTGRES_USER:-neuroquery_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-neuroquery_pass}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - neuroquery_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-neuroquery_user} -d ${POSTGRES_DB:-neuroquery}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  neuroquery_pgdata:
+    driver: local

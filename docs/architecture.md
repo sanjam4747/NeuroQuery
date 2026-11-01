@@ -223,3 +223,71 @@ flowchart TD
 - **`chunks` Table**: Primary key UUID, foreign key `document_id` referencing `documents.id` with `ON DELETE CASCADE`, sequential `chunk_index`, verbatim `text`, `character_count`, `page_start`, `page_end`, `metadata_json`, and a unique constraint on `(document_id, chunk_index)`.
 - **Integrity**: Deleting a parent document automatically removes all associated chunks via PostgreSQL foreign key cascades.
 
+---
+
+## 10. Phase 3: Semantic Embedding Generation & Vector Storage Architecture
+
+### 10.1 Embedding Model Selection & Configuration
+- **Model**: `BAAI/bge-small-en-v1.5` loaded locally via `sentence-transformers`.
+- **Dimensionality**: Exactly 384 dimensions.
+- **Similarity Metric**: Cosine similarity, achieved by computing unit-norm L2 embeddings (`normalize_embeddings=True`).
+- **Privacy & Security**: Zero document content or metadata is transmitted to external APIs; inference runs completely on-premises.
+- **Language Optimization**: Documented as specialized and optimized for English text.
+- **Hardware Acceleration**: Automatic device detection (`cuda` if available, gracefully falling back to `cpu`).
+
+### 10.2 Tokenizer Compatibility & Lossless Oversized Chunk Handling
+- **Tokenizer Limits**: The underlying BERT architecture of `BAAI/bge-small-en-v1.5` enforces a strict sequence length ceiling of `512` wordpiece tokens (accounting for `[CLS]` and `[SEP]` boundary tokens, yielding 510 usable content tokens).
+- **Chunk Sizing Analysis**: Phase 2 character-based chunking creates windows of 1,500 characters with 200 character overlap. In typical prose, 1,500 characters translates to approximately 280–350 tokens, comfortably within the 512-token budget.
+- **Handling Oversized Chunks (Lossless Token-Weighted Sub-Span Pooling)**:
+  - When dense or repetitive alphanumeric text causes a chunk to exceed 510 tokens, the chunk is **never** silently truncated.
+  - **Sub-Window Token Segmentation**: The chunk's token sequence is segmented into overlapping sub-windows ($W = 450$ tokens, overlap $O = 50$ tokens) via `split_into_token_windows`. This ensures that every token is covered with zero omission while preserving context across window boundaries.
+  - **Inference & Token-Weighted Pooling**: Each sub-window is encoded by the embedding model. Rather than relying on simple unweighted averaging, sub-vectors are combined using **token-weighted linear combination**:
+    $$V = \frac{\sum_{k} t_k \cdot v_k}{\sum_{k} t_k}$$
+    where $t_k$ is the token length of window $k$ and $v_k$ is its dense representation.
+  - **Unit L2 Normalization**: The resulting composite vector is L2-normalized:
+    $$\hat{v} = \frac{V}{\|V\|_2}$$
+    ensuring it resides on the unit hypersphere with shape `(384,)` and an L2 norm of `1.0`, completely compatible with cosine similarity vector indices.
+  - **Provenance & Storage Implication**:
+    - **No Duplicate Database Chunks**: Original Phase 2 chunk IDs, text, sequential indices, and parent document relationships remain strictly 1:1. Creating duplicate database chunks would distort document structure, complicate cascading deletion, and skew BM25 retrieval.
+    - **Metadata Tracking**: Full provenance is recorded in `chunk.metadata_json`:
+      - `token_count`: Total token count of the chunk.
+      - `oversized_chunk`: Boolean flag set to `True`.
+      - `sub_chunk_count`: Number of sub-windows processed.
+      - `embedding_method`: `"token_weighted_subchunk_pooling"`.
+      - `sub_chunks`: Array of token span bounds `[{"window": k, "token_start": s, "token_end": e, "token_count": n}]`.
+      - `oversized_info`: Human-readable description documenting that all tokens were represented without data loss.
+    - **Retrieval Implication**: In Phase 4, cosine distance against `chunks.embedding` using the HNSW index operates seamlessly on the 384d vector representing the entire semantic content of the chunk. There is no need for complex multi-vector aggregation or rank-deduplication during vector search.
+
+
+### 10.3 Embedding Service Singleton
+- **Lifecycle & Memory Management**: Encapsulated in `EmbeddingService` as a thread-safe singleton. Model weights are loaded once upon initialization and shared across all ingestion and re-embedding requests, eliminating repeated load overhead.
+- **Batch Processing**: Embeddings are generated in configurable batches (default: 32 chunks) to prevent GPU/CPU memory spikes.
+- **Resilience & Validation**:
+  - Validates output vectors for non-emptiness and exactly 384 dimensions.
+  - Returns empty lists for empty inputs.
+  - Catches inference exceptions gracefully and propagates domain-specific errors without leaving orphan records.
+
+### 10.4 Relational Database & pgvector Integration
+- **`chunks` Table Vector Columns**:
+  - `embedding`: `Vector(384)` storing float32 vector representations.
+  - `embedding_model`: String recording the model identifier that generated the vector.
+  - `embedded_at`: UTC timestamp of vector generation.
+- **`documents` Table Tracking Columns**:
+  - `embedding_status`: Status enum (`pending`, `generating`, `completed`, `failed`).
+  - `embedding_model`: Active model used for document chunks.
+  - `total_embedded_chunks`: Integer count of chunks successfully embedded.
+  - `embedding_error`: Error message if embedding pipeline encounters a failure.
+- **Index Strategy**: Alembic migration `0003_add_chunk_embeddings.py` defines a Hierarchical Navigable Small World (`hnsw`) index utilizing `vector_cosine_ops` when running against PostgreSQL with pgvector.
+- **Safe Downgrades**: Migration scripts cleanly drop indices and columns on downgrade without corrupting existing records.
+
+### 10.5 Ingestion & Re-Embedding Pipeline
+- **Atomic Execution**: Document ingestion executes in a single logical transaction: validation -> extraction -> preprocessing -> chunking -> batch vectorization -> atomic database commit.
+- **Failure Isolation**: If embedding generation fails, the document is marked `embedding_status="failed"` with a descriptive error message; completed documents are never marked completed without verified vectors.
+- **In-Place Re-Embedding**: Dedicated `reembed_document` pipeline allows regenerating vectors when the embedding model is upgraded or following an operational failure, updating chunk vectors in-place without duplicating chunks.
+
+### 10.6 API & Telemetry Endpoints
+- `GET /api/v1/embeddings/info`: Reports model name, dimensionality (384), similarity metric (`cosine`), max sequence length (512), inference device (`cpu`/`cuda`), and status.
+- `POST /api/v1/documents/{id}/reembed`: Triggers chunk re-embedding for a document.
+- `GET /api/v1/documents/{id}/embeddings`: Retrieves document embedding status and chunk completion count.
+
+

@@ -66,6 +66,15 @@ class Settings(BaseSettings):
     CHUNK_SIZE: int = 1500
     CHUNK_OVERLAP: int = 200
 
+    # Semantic Embeddings & Vector Settings (Phase 3)
+    # Local Sentence-Transformers model. Default is 384-dimensional BGE English v1.5.
+    EMBEDDING_MODEL_NAME: str = "BAAI/bge-small-en-v1.5"
+    EMBEDDING_DIMENSION: int = 384
+    EMBEDDING_BATCH_SIZE: int = 32
+    EMBEDDING_DEVICE: str = "auto"  # "auto" (detects CUDA or falls back to CPU), "cpu", "cuda"
+    EMBEDDING_NORMALIZE: bool = True  # L2 normalization for unit-vector cosine similarity
+
+
     def get_storage_path(self) -> Path:
         """Resolve storage path safely and ensure target directory exists."""
         path = Path(self.STORAGE_DIR)

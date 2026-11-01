@@ -1,7 +1,9 @@
 """Document ingestion and chunking processing pipeline."""
 
 import uuid
+from datetime import datetime, timezone
 from typing import Optional
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from app.core.logging import logger
 from app.models.document import Document
@@ -11,6 +13,7 @@ from app.services.validation import DocumentValidator, ValidationError
 from app.services.extractors import get_extractor, ExtractedDocument, ExtractedUnit
 from app.services.preprocessing import normalize_text
 from app.services.chunker import chunker_service
+from app.services.embeddings import embedding_service
 
 
 class DocumentProcessingPipeline:
@@ -92,33 +95,71 @@ class DocumentProcessingPipeline:
             if not generated_chunks:
                 raise ValueError("No readable text chunks could be produced from document.")
 
-            # 7. Persistence
-            chunk_records = [
-                Chunk(
-                    id=uuid.uuid4(),
-                    document_id=doc.id,
-                    chunk_index=chunk.chunk_index,
-                    text=chunk.text,
-                    character_count=chunk.character_count,
-                    page_start=chunk.page_start,
-                    page_end=chunk.page_end,
-                    metadata_json=chunk.metadata,
-                )
-                for chunk in generated_chunks
-            ]
+            # 7. Semantic Embedding Generation (Phase 3)
+            doc.embedding_status = "generating"
+            chunk_texts = [chunk.text for chunk in generated_chunks]
+            embeddings, emb_metrics = embedding_service.embed_batch(chunk_texts)
 
+            now_utc = datetime.now(timezone.utc)
+            chunk_records = []
+            for idx, chunk in enumerate(generated_chunks):
+                meta = dict(chunk.metadata)
+                token_count = emb_metrics["token_counts"][idx]
+                sub_chunk_count = emb_metrics["sub_chunk_counts"][idx]
+                meta["token_count"] = token_count
+                meta["sub_chunk_count"] = sub_chunk_count
+                if idx in emb_metrics["oversized_chunks"]:
+                    meta["oversized_chunk"] = True
+                    meta["embedding_method"] = "token_weighted_subchunk_pooling"
+                    meta["sub_chunks"] = emb_metrics["chunk_details"][idx]["sub_chunks"]
+                    meta["oversized_info"] = (
+                        f"Chunk has {token_count} tokens (> {embedding_service.max_sequence_length}). "
+                        f"Safely embedded via {sub_chunk_count} token-weighted sub-windows with zero content discarded."
+                    )
+                else:
+                    meta["oversized_chunk"] = False
+                    meta["embedding_method"] = "direct"
+
+                chunk_records.append(
+                    Chunk(
+                        id=uuid.uuid4(),
+                        document_id=doc.id,
+                        chunk_index=chunk.chunk_index,
+                        text=chunk.text,
+                        character_count=chunk.character_count,
+                        page_start=chunk.page_start,
+                        page_end=chunk.page_end,
+                        metadata_json=meta,
+                        embedding=embeddings[idx],
+                        embedding_model=embedding_service.model_name,
+                        embedded_at=now_utc,
+                    )
+                )
+
+            # 8. Persistence (Atomic commit)
             db.add_all(chunk_records)
 
-            # Update Document summary
+            # Update Document summary & embedding metrics
             doc.status = "completed"
             doc.total_pages = extracted.total_pages
             doc.total_characters = sum(c.character_count for c in chunk_records)
             doc.total_chunks = len(chunk_records)
             doc.error_message = None
 
+            doc.embedding_status = "completed"
+            doc.embedding_model = embedding_service.model_name
+            doc.total_embedded_chunks = len(chunk_records)
+            doc.embedding_error = None
+
             db.commit()
             db.refresh(doc)
-            logger.info("Successfully ingested document %s (%d chunks)", doc.original_filename, doc.total_chunks)
+            logger.info(
+                "Successfully ingested document %s (%d chunks, %d embedded in %.1f ms)",
+                doc.original_filename,
+                doc.total_chunks,
+                doc.total_embedded_chunks,
+                emb_metrics["duration_ms"],
+            )
             return doc
 
         except Exception as exc:
@@ -126,9 +167,85 @@ class DocumentProcessingPipeline:
             logger.error("Error processing document %s: %s", original_filename, exc, exc_info=True)
             doc.status = "failed"
             doc.error_message = str(exc)
+            doc.embedding_status = "failed"
+            doc.embedding_error = str(exc)
             db.commit()
             db.refresh(doc)
             return doc
+
+    def reembed_document(self, db: Session, document_id: uuid.UUID) -> Document:
+        """
+        Regenerates semantic embeddings for all existing chunks of a document.
+        Updates chunks in-place without duplicating records.
+        """
+        doc = db.get(Document, document_id)
+        if not doc:
+            raise ValueError(f"Document with ID '{document_id}' not found.")
+
+        chunks = db.scalars(
+            select(Chunk)
+            .where(Chunk.document_id == document_id)
+            .order_by(Chunk.chunk_index)
+        ).all()
+
+        if not chunks:
+            raise ValueError(f"Document '{document_id}' has no chunks available to embed.")
+
+        doc.embedding_status = "generating"
+        db.commit()
+
+        try:
+            chunk_texts = [c.text for c in chunks]
+            embeddings, emb_metrics = embedding_service.embed_batch(chunk_texts)
+
+            now_utc = datetime.now(timezone.utc)
+            for idx, chunk in enumerate(chunks):
+                chunk.embedding = embeddings[idx]
+                chunk.embedding_model = embedding_service.model_name
+                chunk.embedded_at = now_utc
+
+                meta = dict(chunk.metadata_json or {})
+                token_count = emb_metrics["token_counts"][idx]
+                sub_chunk_count = emb_metrics["sub_chunk_counts"][idx]
+                meta["token_count"] = token_count
+                meta["sub_chunk_count"] = sub_chunk_count
+                if idx in emb_metrics["oversized_chunks"]:
+                    meta["oversized_chunk"] = True
+                    meta["embedding_method"] = "token_weighted_subchunk_pooling"
+                    meta["sub_chunks"] = emb_metrics["chunk_details"][idx]["sub_chunks"]
+                    meta["oversized_info"] = (
+                        f"Chunk has {token_count} tokens (> {embedding_service.max_sequence_length}). "
+                        f"Safely embedded via {sub_chunk_count} token-weighted sub-windows with zero content discarded."
+                    )
+                    if "oversized_warning" in meta:
+                        del meta["oversized_warning"]
+                else:
+                    meta["oversized_chunk"] = False
+                    meta["embedding_method"] = "direct"
+                chunk.metadata_json = meta
+
+            doc.embedding_status = "completed"
+            doc.embedding_model = embedding_service.model_name
+            doc.total_embedded_chunks = len(chunks)
+            doc.embedding_error = None
+
+            db.commit()
+            db.refresh(doc)
+            logger.info(
+                "Successfully re-embedded document %s (%d chunks in %.1f ms)",
+                doc.original_filename,
+                len(chunks),
+                emb_metrics["duration_ms"],
+            )
+            return doc
+        except Exception as exc:
+            db.rollback()
+            logger.error("Re-embedding failed for document %s: %s", document_id, exc, exc_info=True)
+            doc.embedding_status = "failed"
+            doc.embedding_error = str(exc)
+            db.commit()
+            db.refresh(doc)
+            raise RuntimeError(f"Re-embedding failed: {exc}") from exc
 
     def delete_document(self, db: Session, document: Document) -> None:
         """Deletes a document from the database (cascading chunks) and removes stored file."""

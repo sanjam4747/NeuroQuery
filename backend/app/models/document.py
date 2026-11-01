@@ -80,6 +80,30 @@ class Document(Base):
         nullable=True,
         comment="Diagnostic failure message if status is failed",
     )
+    # Semantic Embedding Lifecycle & Metrics (Phase 3)
+    embedding_status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="pending",
+        index=True,
+        comment="Embedding status: pending, generating, completed, failed",
+    )
+    embedding_model: Mapped[Optional[str]] = mapped_column(
+        String(100),
+        nullable=True,
+        comment="Active model identifier, e.g. BAAI/bge-small-en-v1.5",
+    )
+    total_embedded_chunks: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        comment="Total chunks with generated embeddings",
+    )
+    embedding_error: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Error message if embedding generation failed",
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

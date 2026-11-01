@@ -19,6 +19,10 @@ class DocumentResponse(BaseModel):
     total_characters: int = Field(0, description="Total extracted character count.")
     total_chunks: int = Field(0, description="Total number of chunks generated.")
     error_message: Optional[str] = Field(None, description="Diagnostic error message if status is failed.")
+    embedding_status: str = Field("pending", description="Embedding generation status: pending, generating, completed, failed.")
+    embedding_model: Optional[str] = Field(None, description="Model identifier used for chunk embeddings.")
+    total_embedded_chunks: int = Field(0, description="Total chunks with generated embeddings.")
+    embedding_error: Optional[str] = Field(None, description="Diagnostic error message if embedding failed.")
     created_at: datetime = Field(..., description="Upload timestamp in UTC.")
     updated_at: datetime = Field(..., description="Last update timestamp in UTC.")
 

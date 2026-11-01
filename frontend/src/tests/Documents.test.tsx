@@ -4,7 +4,19 @@ import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
 import { DocumentsPage } from '../pages/Documents';
 import { documentService } from '../services/documentService';
-import type { DocumentItem, ChunkListResponse } from '../types';
+import type { DocumentItem, ChunkListResponse, EmbeddingModelInfo } from '../types';
+
+const mockModelInfo: EmbeddingModelInfo = {
+  model_name: 'BAAI/bge-small-en-v1.5',
+  dimension: 384,
+  max_sequence_length: 512,
+  device: 'cpu',
+  batch_size: 32,
+  normalize: true,
+  metric: 'cosine',
+  is_loaded: true,
+  description: 'English text optimization',
+};
 
 const mockDocs: DocumentItem[] = [
   {
@@ -17,6 +29,10 @@ const mockDocs: DocumentItem[] = [
     total_pages: 5,
     total_characters: 12500,
     total_chunks: 10,
+    embedding_status: 'completed',
+    embedding_model: 'BAAI/bge-small-en-v1.5',
+    total_embedded_chunks: 10,
+    embedding_error: null,
     error_message: null,
     created_at: '2026-11-01T12:00:00Z',
     updated_at: '2026-11-01T12:00:05Z',
@@ -31,6 +47,10 @@ const mockDocs: DocumentItem[] = [
     total_pages: null,
     total_characters: 0,
     total_chunks: 0,
+    embedding_status: 'failed',
+    embedding_model: null,
+    total_embedded_chunks: 0,
+    embedding_error: 'Extraction failed',
     error_message: 'File is not a valid DOCX document',
     created_at: '2026-11-01T12:10:00Z',
     updated_at: '2026-11-01T12:10:02Z',
@@ -47,7 +67,10 @@ const mockChunks: ChunkListResponse = {
       character_count: 67,
       page_start: 1,
       page_end: 1,
-      metadata_json: { source_page: 1 },
+      has_embedding: true,
+      embedding_model: 'BAAI/bge-small-en-v1.5',
+      embedded_at: '2026-11-01T12:00:05Z',
+      metadata_json: { source_page: 1, token_count: 15 },
       created_at: '2026-11-01T12:00:05Z',
     },
     {
@@ -58,7 +81,10 @@ const mockChunks: ChunkListResponse = {
       character_count: 54,
       page_start: 1,
       page_end: 2,
-      metadata_json: { source_page: 1 },
+      has_embedding: true,
+      embedding_model: 'BAAI/bge-small-en-v1.5',
+      embedded_at: '2026-11-01T12:00:05Z',
+      metadata_json: { source_page: 1, token_count: 12 },
       created_at: '2026-11-01T12:00:05Z',
     },
   ],
@@ -70,6 +96,7 @@ const mockChunks: ChunkListResponse = {
 describe('DocumentsPage Component', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.spyOn(documentService, 'getEmbeddingModelInfo').mockResolvedValue(mockModelInfo);
   });
 
   const renderPage = () => {
@@ -200,5 +227,79 @@ describe('DocumentsPage Component', () => {
     await user.click(confirmBtn);
 
     expect(deleteSpy).toHaveBeenCalledWith('11111111-1111-1111-1111-111111111111');
+  });
+
+  it('renders embedding model telemetry banner and document embedding status', async () => {
+    vi.spyOn(documentService, 'getDocuments').mockResolvedValueOnce({
+      items: mockDocs,
+      total: 2,
+      skip: 0,
+      limit: 50,
+    });
+
+    renderPage();
+
+    // Verify model telemetry banner
+    expect(await screen.findByText('BAAI/bge-small-en-v1.5')).toBeInTheDocument();
+    expect(screen.getByText('384 Dimensions')).toBeInTheDocument();
+    expect(screen.getByText('Device: CPU')).toBeInTheDocument();
+
+    // Verify embedding column statuses
+    expect(screen.getByText('Embedded')).toBeInTheDocument();
+    expect(screen.getByText('(10/10)')).toBeInTheDocument();
+    expect(screen.getByText('Embed Failed')).toBeInTheDocument();
+  });
+
+  it('triggers document re-embedding on user action', async () => {
+    vi.spyOn(documentService, 'getDocuments').mockResolvedValue({
+      items: mockDocs,
+      total: 2,
+      skip: 0,
+      limit: 50,
+    });
+
+    const reembedSpy = vi.spyOn(documentService, 'reembedDocument').mockResolvedValueOnce({
+      document_id: '11111111-1111-1111-1111-111111111111',
+      status: 'completed',
+      total_embedded_chunks: 10,
+      embedding_model: 'BAAI/bge-small-en-v1.5',
+      message: 'Successfully re-embedded 10 chunks using BAAI/bge-small-en-v1.5.',
+    });
+
+    renderPage();
+
+    expect(await screen.findByText('research_paper.pdf')).toBeInTheDocument();
+
+    const reembedBtn = screen.getAllByTitle('Re-embed Chunks')[0];
+    const user = userEvent.setup();
+    await user.click(reembedBtn);
+
+    expect(reembedSpy).toHaveBeenCalledWith('11111111-1111-1111-1111-111111111111');
+    expect(
+      await screen.findByText(/Successfully re-embedded 10 chunks/i)
+    ).toBeInTheDocument();
+  });
+
+  it('displays vector embedding indicator and token count in chunk inspector', async () => {
+    vi.spyOn(documentService, 'getDocuments').mockResolvedValueOnce({
+      items: mockDocs,
+      total: 2,
+      skip: 0,
+      limit: 50,
+    });
+
+    vi.spyOn(documentService, 'getDocumentChunks').mockResolvedValueOnce(mockChunks);
+
+    renderPage();
+
+    expect(await screen.findByText('research_paper.pdf')).toBeInTheDocument();
+
+    const inspectBtn = screen.getAllByTitle('Inspect Chunks')[0];
+    const user = userEvent.setup();
+    await user.click(inspectBtn);
+
+    expect(await screen.findByText('Chunk Inspector')).toBeInTheDocument();
+    expect(screen.getAllByText('384d Vector').length).toBe(2);
+    expect(screen.getByText('~15 tokens')).toBeInTheDocument();
   });
 });

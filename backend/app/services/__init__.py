@@ -6,6 +6,7 @@ from app.services.validation import DocumentValidator, ValidationError
 from app.services.chunker import chunker_service, DocumentChunker
 from app.services.preprocessing import normalize_text
 from app.services.pipeline import pipeline_service, DocumentProcessingPipeline
+from app.services.embeddings import embedding_service, EmbeddingService
 
 __all__ = [
     "check_database_health",
@@ -19,4 +20,6 @@ __all__ = [
     "normalize_text",
     "pipeline_service",
     "DocumentProcessingPipeline",
+    "embedding_service",
+    "EmbeddingService",
 ]

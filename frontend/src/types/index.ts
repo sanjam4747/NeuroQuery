@@ -34,6 +34,7 @@ export interface PlannedFeature {
 // ==============================================================================
 
 export type DocumentStatus = 'uploaded' | 'processing' | 'completed' | 'failed';
+export type EmbeddingStatus = 'pending' | 'generating' | 'completed' | 'failed';
 
 export interface DocumentItem {
   id: string;
@@ -46,6 +47,10 @@ export interface DocumentItem {
   total_characters: number;
   total_chunks: number;
   error_message: string | null;
+  embedding_status: EmbeddingStatus;
+  embedding_model: string | null;
+  total_embedded_chunks: number;
+  embedding_error: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -66,6 +71,9 @@ export interface ChunkItem {
   page_start: number | null;
   page_end: number | null;
   metadata_json: Record<string, any>;
+  has_embedding?: boolean;
+  embedding_model?: string | null;
+  embedded_at?: string | null;
   created_at: string;
 }
 
@@ -75,3 +83,24 @@ export interface ChunkListResponse {
   skip: number;
   limit: number;
 }
+
+export interface EmbeddingModelInfo {
+  model_name: string;
+  dimension: number;
+  max_sequence_length: number;
+  device: string;
+  batch_size: number;
+  normalize: boolean;
+  metric: string;
+  is_loaded: boolean;
+  description: string;
+}
+
+export interface ReembedResponse {
+  document_id: string;
+  status: EmbeddingStatus;
+  total_embedded_chunks: number;
+  embedding_model: string;
+  message: string;
+}
+

@@ -11,6 +11,7 @@ from app.models.document import Document
 from app.models.chunk import Chunk
 from app.schemas.document import DocumentListResponse, DocumentResponse
 from app.schemas.chunk import ChunkListResponse, ChunkResponse
+from app.schemas.embeddings import ReembedResponse
 from app.services.pipeline import pipeline_service
 from app.services.validation import ValidationError
 
@@ -167,4 +168,70 @@ def delete_document(
     return {
         "message": f"Document '{filename}' and all associated chunks were successfully deleted.",
         "id": str(document_id),
+    }
+
+
+@router.post(
+    "/{document_id}/reembed",
+    response_model=ReembedResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Re-embed Document Chunks",
+    description="Regenerates semantic vector embeddings for all existing chunks of a document using the active model.",
+)
+def reembed_document(
+    document_id: uuid.UUID,
+    db: Session = Depends(get_db),
+) -> ReembedResponse:
+    doc = db.get(Document, document_id)
+    if not doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document with ID '{document_id}' not found.",
+        )
+
+    try:
+        updated_doc = pipeline_service.reembed_document(db, document_id)
+        return ReembedResponse(
+            document_id=updated_doc.id,
+            status=updated_doc.embedding_status,
+            total_embedded_chunks=updated_doc.total_embedded_chunks,
+            embedding_model=updated_doc.embedding_model or "",
+            message=f"Successfully re-embedded {updated_doc.total_embedded_chunks} chunks using {updated_doc.embedding_model}.",
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Re-embedding operation failed: {exc}",
+        )
+
+
+@router.get(
+    "/{document_id}/embeddings",
+    status_code=status.HTTP_200_OK,
+    summary="Get Document Embedding Status",
+    description="Retrieves the current embedding status, active model, and embedded chunk counts for a document.",
+)
+def get_document_embedding_status(
+    document_id: uuid.UUID,
+    db: Session = Depends(get_db),
+) -> dict:
+    doc = db.get(Document, document_id)
+    if not doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document with ID '{document_id}' not found.",
+        )
+
+    return {
+        "document_id": str(doc.id),
+        "embedding_status": doc.embedding_status,
+        "embedding_model": doc.embedding_model,
+        "total_chunks": doc.total_chunks,
+        "total_embedded_chunks": doc.total_embedded_chunks,
+        "embedding_error": doc.embedding_error,
     }

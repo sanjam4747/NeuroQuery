@@ -17,6 +17,9 @@ class ChunkResponse(BaseModel):
     page_start: Optional[int] = Field(None, description="Starting page (PDF).")
     page_end: Optional[int] = Field(None, description="Ending page (PDF).")
     metadata_json: Dict[str, Any] = Field(default_factory=dict, description="Structural provenance metadata.")
+    has_embedding: bool = Field(False, description="Whether this chunk has a generated semantic embedding.")
+    embedding_model: Optional[str] = Field(None, description="Model identifier used for this embedding.")
+    embedded_at: Optional[datetime] = Field(None, description="Timestamp when embedding was computed.")
     created_at: datetime = Field(..., description="Creation timestamp in UTC.")
 
     model_config = ConfigDict(from_attributes=True)

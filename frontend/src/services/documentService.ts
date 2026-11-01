@@ -1,5 +1,11 @@
 import { apiClient } from './api';
-import type { DocumentItem, DocumentListResponse, ChunkListResponse } from '../types';
+import type {
+  DocumentItem,
+  DocumentListResponse,
+  ChunkListResponse,
+  EmbeddingModelInfo,
+  ReembedResponse,
+} from '../types';
 
 export const documentService = {
   /**
@@ -54,4 +60,21 @@ export const documentService = {
     const response = await apiClient.delete<{ message: string; id: string }>(`/documents/${documentId}`);
     return response.data;
   },
+
+  /**
+   * Triggers re-generation of semantic vector embeddings for a document's chunks.
+   */
+  async reembedDocument(documentId: string): Promise<ReembedResponse> {
+    const response = await apiClient.post<ReembedResponse>(`/documents/${documentId}/reembed`);
+    return response.data;
+  },
+
+  /**
+   * Retrieves metadata regarding the active Sentence-Transformers embedding model.
+   */
+  async getEmbeddingModelInfo(): Promise<EmbeddingModelInfo> {
+    const response = await apiClient.get<EmbeddingModelInfo>('/embeddings/info');
+    return response.data;
+  },
 };
+

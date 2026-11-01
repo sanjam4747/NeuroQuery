@@ -14,8 +14,8 @@ gantt
     Phase 1: Architecture & Foundation          :done, p1, 2026-11-01, 7d
     section Ingestion & Search
     Phase 2: Document Processing & Chunking     :done, p2, after p1, 14d
-    Phase 3: Embeddings & pgvector Storage      :active, p3, after p2, 14d
-    Phase 4: Hybrid Retrieval (Vector + BM25)   :p4, after p3, 14d
+    Phase 3: Embeddings & pgvector Storage      :done, p3, after p2, 14d
+    Phase 4: Hybrid Retrieval (Vector + BM25)   :active, p4, after p3, 14d
     section Intelligence & RAG
     Phase 5: Reranking & Context Compression    :p5, after p4, 10d
     Phase 6: Grounded RAG & Citations           :p6, after p5, 14d
@@ -58,13 +58,22 @@ gantt
 
 ---
 
-### Phase 3: Embedding Generation and Vector Storage (Planned)
-- Text embedding generation service supporting Hugging Face / Sentence-Transformers (e.g., `BAAI/bge-large-en-v1.5`) and OpenAI embeddings.
-- pgvector integration with SQLAlchemy:
-  - Vector column definitions (`Vector(dim)`).
-  - HNSW (Hierarchical Navigable Small World) index creation for sub-millisecond approximate nearest neighbor search.
-  - Batched chunk embedding generation with progress tracking.
-- Storage of embeddings linked directly to source document chunks.
+### Phase 3: Embedding Generation and Vector Storage (Completed)
+- [x] Local Sentence-Transformers integration using `BAAI/bge-small-en-v1.5` generating 384-dimensional dense vectors.
+- [x] L2 unit-norm vector normalization (`normalize_embeddings=True`) for exact cosine similarity.
+- [x] Tokenizer sequence length analysis (512 token limit) and oversize chunk token auditing with warnings.
+- [x] Thread-safe `EmbeddingService` singleton with lazy loading, CPU/CUDA hardware detection, and batching (`EMBEDDING_BATCH_SIZE=32`).
+- [x] PostgreSQL + `pgvector` persistence via `Vector(384)` column on `chunks`, model tracking, and timestamping.
+- [x] Document-level embedding tracking (`embedding_status`, `total_embedded_chunks`, `embedding_error`).
+- [x] Alembic migration `0003_add_chunk_embeddings.py` adding vector columns and conditional HNSW cosine index (`vector_cosine_ops`).
+- [x] Ingestion pipeline extension ensuring atomic vector generation before document completion.
+- [x] In-place re-embedding pipeline (`reembed_document`) without chunk duplication.
+- [x] Versioned REST API endpoints:
+  - `GET /api/v1/embeddings/info`: Active model telemetry and configuration.
+  - `POST /api/v1/documents/{id}/reembed`: In-place vector regeneration.
+  - `GET /api/v1/documents/{id}/embeddings`: Status and progress inspection.
+- [x] Frontend UI integration: active model telemetry banner, embedding status badges, chunk inspector vector indicators, and re-embed actions.
+- [x] Comprehensive test coverage: 55 backend tests (model singleton, 384 dimensions, batching, oversize tokens, re-embedding, rollback) and 18 frontend tests.
 
 ---
 

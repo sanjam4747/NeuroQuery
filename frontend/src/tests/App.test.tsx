@@ -13,6 +13,17 @@ describe('App Integration', () => {
       skip: 0,
       limit: 50,
     });
+    vi.spyOn(documentService, 'getEmbeddingModelInfo').mockResolvedValue({
+      model_name: 'BAAI/bge-small-en-v1.5',
+      dimension: 384,
+      max_sequence_length: 512,
+      device: 'cpu',
+      batch_size: 32,
+      normalize: true,
+      metric: 'cosine',
+      is_loaded: true,
+      description: 'English text optimization',
+    });
   });
   it('renders application branding, sidebar navigation, and dashboard overview', async () => {
     vi.spyOn(healthService, 'getHealth').mockResolvedValueOnce({
@@ -31,7 +42,7 @@ describe('App Integration', () => {
     // Brand and hero checks
     expect(screen.getAllByText('NeuroQuery').length).toBeGreaterThan(0);
     expect(screen.getByText('Document Intelligence Platform')).toBeInTheDocument();
-    expect(screen.getByText('Current: Phase 2 (Document Processing & Chunking)')).toBeInTheDocument();
+    expect(screen.getByText('Current: Phase 3 (Semantic Embeddings & Vector Storage)')).toBeInTheDocument();
 
     // Check navigation links
     expect(screen.getAllByText('Documents').length).toBeGreaterThan(0);
@@ -50,7 +61,7 @@ describe('App Integration', () => {
     expect(
       screen.getByText('Document Ingestion & Chunking')
     ).toBeInTheDocument();
-    expect(screen.getByText('Phase 2 Active')).toBeInTheDocument();
+    expect(screen.getByText('Phase 3 Active')).toBeInTheDocument();
 
     // Click back to Dashboard
     const backBtn = screen.getAllByText('Dashboard')[0];

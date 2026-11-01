@@ -17,9 +17,11 @@ import {
   ArrowLeft,
   Layers,
   Sparkles,
+  Cpu,
+  Binary,
 } from 'lucide-react';
 import { documentService } from '../services/documentService';
-import type { DocumentItem, ChunkItem } from '../types';
+import type { DocumentItem, ChunkItem, EmbeddingModelInfo } from '../types';
 
 export const DocumentsPage: React.FC = () => {
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
@@ -28,6 +30,10 @@ export const DocumentsPage: React.FC = () => {
   const [uploading, setUploading] = useState<boolean>(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
+
+  // Embedding model info
+  const [modelInfo, setModelInfo] = useState<EmbeddingModelInfo | null>(null);
+  const [reembeddingId, setReembeddingId] = useState<string | null>(null);
 
   // Inspector modal state
   const [inspectDoc, setInspectDoc] = useState<DocumentItem | null>(null);
@@ -57,9 +63,42 @@ export const DocumentsPage: React.FC = () => {
     }
   }, []);
 
+  const fetchModelInfo = useCallback(async () => {
+    try {
+      const info = await documentService.getEmbeddingModelInfo();
+      setModelInfo(info);
+    } catch (err: any) {
+      console.warn('Failed to fetch embedding model info:', err);
+    }
+  }, []);
+
   useEffect(() => {
     fetchDocuments();
-  }, [fetchDocuments]);
+    fetchModelInfo();
+  }, [fetchDocuments, fetchModelInfo]);
+
+  // Re-embed handling
+  const handleReembed = async (doc: DocumentItem) => {
+    setReembeddingId(doc.id);
+    setUploadError(null);
+    setUploadSuccess(null);
+    try {
+      const res = await documentService.reembedDocument(doc.id);
+      setUploadSuccess(
+        res.message ||
+          `Successfully re-embedded ${res.total_embedded_chunks} chunks for "${doc.original_filename}" using ${res.embedding_model}.`
+      );
+      await fetchDocuments();
+      if (inspectDoc?.id === doc.id) {
+        await loadChunks(doc.id, chunksPage);
+      }
+    } catch (err: any) {
+      const detail = err.response?.data?.detail || err.message || 'Re-embedding failed.';
+      setUploadError(`Re-embedding failed: ${detail}`);
+    } finally {
+      setReembeddingId(null);
+    }
+  };
 
   // Load chunks when inspectDoc changes
   const loadChunks = useCallback(async (docId: string, page: number) => {
@@ -115,7 +154,13 @@ export const DocumentsPage: React.FC = () => {
       if (uploadedDoc.status === 'failed') {
         setUploadError(`Ingestion warning: ${uploadedDoc.error_message || 'Processing failed'}`);
       } else {
-        setUploadSuccess(`Successfully ingested "${uploadedDoc.original_filename}" into ${uploadedDoc.total_chunks} semantic chunks.`);
+        const embeddedMsg =
+          uploadedDoc.embedding_status === 'completed'
+            ? ` and generated ${uploadedDoc.total_embedded_chunks} vector embeddings (${uploadedDoc.embedding_model || '384d'})`
+            : '';
+        setUploadSuccess(
+          `Successfully ingested "${uploadedDoc.original_filename}" into ${uploadedDoc.total_chunks} semantic chunks${embeddedMsg}.`
+        );
       }
       await fetchDocuments();
     } catch (err: any) {
@@ -233,6 +278,53 @@ export const DocumentsPage: React.FC = () => {
     }
   };
 
+  const getEmbeddingStatusBadge = (
+    status?: string,
+    embeddedCount?: number,
+    totalCount?: number,
+    error?: string | null
+  ) => {
+    switch (status) {
+      case 'completed':
+        return (
+          <span
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800"
+            title={`${embeddedCount ?? 0} of ${totalCount ?? 0} chunks embedded`}
+          >
+            <Sparkles className="w-3 h-3" />
+            <span>Embedded</span>
+            <span className="text-[10px] font-mono opacity-80">
+              ({embeddedCount ?? 0}/{totalCount ?? 0})
+            </span>
+          </span>
+        );
+      case 'generating':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
+            <RefreshCw className="w-3 h-3 animate-spin" />
+            Embedding...
+          </span>
+        );
+      case 'failed':
+        return (
+          <span
+            title={error || 'Embedding generation failed'}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-200 dark:border-rose-800 cursor-help"
+          >
+            <AlertCircle className="w-3 h-3" />
+            Embed Failed
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+            <Clock className="w-3 h-3" />
+            Pending
+          </span>
+        );
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto py-2">
       {/* Breadcrumb & Navigation Header */}
@@ -250,11 +342,11 @@ export const DocumentsPage: React.FC = () => {
               Document Ingestion & Chunking
             </h1>
             <span className="px-2 py-0.5 text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 rounded border border-emerald-200 dark:border-emerald-800">
-              Phase 2 Active
+              Phase 3 Active
             </span>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Upload PDF, DOCX, and TXT files for layout-aware text extraction and semantic chunking
+            Upload PDF, DOCX, and TXT files for layout-aware text extraction, semantic chunking, and pgvector embeddings
           </p>
         </div>
 
@@ -270,6 +362,43 @@ export const DocumentsPage: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Model Telemetry Banner */}
+      {modelInfo && (
+        <div className="flex flex-wrap items-center justify-between gap-3 p-3 px-4 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 text-xs">
+          <div className="flex items-center gap-2">
+            <div className="p-1 rounded-md bg-brand-50 text-brand-600 dark:bg-brand-950 dark:text-brand-400">
+              <Cpu className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="font-semibold text-slate-900 dark:text-slate-100">
+                Active Embedding Model:{' '}
+              </span>
+              <span className="font-mono text-brand-600 dark:text-brand-400 font-bold">
+                {modelInfo.model_name}
+              </span>
+              <span className="text-slate-400 ml-2">
+                ({modelInfo.description || 'English-optimized'})
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 font-mono text-[11px] text-slate-600 dark:text-slate-400">
+            <span className="px-2 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+              {modelInfo.dimension} Dimensions
+            </span>
+            <span className="px-2 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 capitalize">
+              {modelInfo.metric}
+            </span>
+            <span className="px-2 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+              Device: {modelInfo.device.toUpperCase()}
+            </span>
+            <span className="px-2 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+              Max Tokens: {modelInfo.max_sequence_length}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Upload Dropzone */}
       <div
@@ -393,6 +522,7 @@ export const DocumentsPage: React.FC = () => {
                   <th className="py-3.5 px-3">Size</th>
                   <th className="py-3.5 px-3">Pages</th>
                   <th className="py-3.5 px-3">Chunks</th>
+                  <th className="py-3.5 px-3">Embeddings</th>
                   <th className="py-3.5 px-3">Status</th>
                   <th className="py-3.5 px-3">Uploaded</th>
                   <th className="py-3.5 px-4 sm:px-6 text-right">Actions</th>
@@ -420,12 +550,32 @@ export const DocumentsPage: React.FC = () => {
                         {doc.total_chunks}
                       </span>
                     </td>
+                    <td className="py-3.5 px-3">
+                      {getEmbeddingStatusBadge(
+                        doc.embedding_status,
+                        doc.total_embedded_chunks,
+                        doc.total_chunks,
+                        doc.embedding_error
+                      )}
+                    </td>
                     <td className="py-3.5 px-3">{getStatusBadge(doc.status, doc.error_message)}</td>
                     <td className="py-3.5 px-3 text-slate-500 dark:text-slate-400 text-[11px] font-mono">
                       {new Date(doc.created_at).toLocaleDateString()}
                     </td>
                     <td className="py-3.5 px-4 sm:px-6 text-right">
                       <div className="inline-flex items-center gap-1">
+                        <button
+                          onClick={() => handleReembed(doc)}
+                          disabled={reembeddingId === doc.id || doc.status === 'processing'}
+                          className="p-1.5 text-slate-500 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-40"
+                          title="Re-embed Chunks"
+                        >
+                          <Sparkles
+                            className={`w-4 h-4 ${
+                              reembeddingId === doc.id ? 'animate-spin text-brand-600 dark:text-brand-400' : ''
+                            }`}
+                          />
+                        </button>
                         <button
                           onClick={() => openInspector(doc)}
                           className="p-1.5 text-slate-500 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
@@ -516,6 +666,37 @@ export const DocumentsPage: React.FC = () => {
                         {chunk.metadata_json?.paragraph_start !== undefined && (
                           <span className="px-2 py-0.5 rounded text-[11px] font-mono bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                             Para {chunk.metadata_json.paragraph_start}–{chunk.metadata_json.paragraph_end}
+                          </span>
+                        )}
+                        {chunk.has_embedding ? (
+                          <span
+                            title={`Embedded with ${chunk.embedding_model || '384d model'}`}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800"
+                          >
+                            <Binary className="w-3 h-3" />
+                            384d Vector
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono bg-slate-200 dark:bg-slate-800 text-slate-500">
+                            No Vector
+                          </span>
+                        )}
+                        {chunk.metadata_json?.token_count !== undefined && (
+                          <span className="px-2 py-0.5 rounded text-[11px] font-mono bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                            ~{chunk.metadata_json.token_count} tokens
+                          </span>
+                        )}
+                        {(chunk.metadata_json?.oversized_chunk || chunk.metadata_json?.oversized_warning) && (
+                          <span
+                            title={
+                              chunk.metadata_json.oversized_info ||
+                              `Chunk exceeds 512 tokens. Safely embedded via ${chunk.metadata_json.sub_chunk_count || 'multiple'} sub-windows.`
+                            }
+                            className="px-2 py-0.5 rounded text-[11px] font-mono font-semibold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400 border border-blue-200 dark:border-blue-800"
+                          >
+                            {chunk.metadata_json.sub_chunk_count
+                              ? `Sub-Pooled (${chunk.metadata_json.sub_chunk_count}x)`
+                              : 'Oversized (>512)'}
                           </span>
                         )}
                       </div>

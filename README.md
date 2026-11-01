@@ -11,7 +11,7 @@
 **NeuroQuery** is an end-to-end NLP-powered document research and intelligence platform. It provides document parsing, semantic chunking, high-dimensional vector embeddings, hybrid retrieval (dense vector similarity + sparse BM25 keyword matching), cross-encoder reranking, and document-grounded question answering (RAG) with verifiable citations, multi-document contradiction detection, and retrieval evaluation.
 
 > [!NOTE]
-> **Current Status**: **Phase 2 — Document Processing & Chunking Pipeline** is complete and practically verified. Future vector embedding and RAG capabilities will be introduced iteratively in subsequent phases according to the [Development Roadmap](docs/development-roadmap.md).
+> **Current Status**: **Phase 3 — Semantic Embedding Generation & Vector Storage** is complete and practically verified. Vector embeddings are generated locally via Sentence-Transformers (`BAAI/bge-small-en-v1.5`, 384 dimensions) and persisted using PostgreSQL with `pgvector`. Future hybrid retrieval and RAG capabilities will be introduced iteratively in subsequent phases according to the [Development Roadmap](docs/development-roadmap.md).
 
 ---
 
@@ -168,13 +168,13 @@ This launches a PostgreSQL 16 container with `pgvector` pre-installed on port `5
 ## Running Automated Tests
 
 ### Backend Tests (Pytest)
-Run all 45 automated unit and integration tests (validation, extractors, preprocessing, chunking, word boundary snapping, storage security, pipeline orchestrator, API endpoints, health & config):
+Run all 62 automated unit and integration tests (validation, extractors, preprocessing, chunking, word boundary snapping, storage security, pipeline orchestrator, embedding service singleton, 384d dimensionality, vector normalization, direct token ID tensor batch inference, lossless sub-window token pooling for oversized chunks, in-place re-embedding, and API endpoints):
 ```powershell
 backend\.venv\Scripts\pytest backend/tests -v
 ```
 
 ### Frontend Tests (Vitest)
-Run all 15 automated component and integration tests (Documents page, chunk inspector modal, file validation, navigation, health status badge):
+Run all 18 automated component and integration tests (Documents page, model telemetry banner, chunk inspector modal, 384d vector badges, file validation, navigation, health status badge, re-embedding action):
 ```powershell
 cd frontend
 npm test
@@ -200,6 +200,11 @@ Configured in `backend/.env` with safe fallbacks in `backend/app/core/config.py`
 | `ALLOWED_EXTENSIONS` | `[".pdf", ".docx", ".txt"]` | Whitelist of supported file extensions. |
 | `CHUNK_SIZE` | `1500` | Target chunk size in characters (~375 tokens). |
 | `CHUNK_OVERLAP` | `200` | Overlap between consecutive chunks in characters (~50 tokens). |
+| `EMBEDDING_MODEL_NAME` | `BAAI/bge-small-en-v1.5` | Hugging Face Sentence-Transformers model identifier. |
+| `EMBEDDING_DIMENSION` | `384` | Semantic vector embedding dimensionality. |
+| `EMBEDDING_BATCH_SIZE` | `32` | Batch size for embedding generation. |
+| `EMBEDDING_DEVICE` | `auto` | Inference device (`auto`, `cpu`, or `cuda`). |
+| `EMBEDDING_NORMALIZE` | `True` | Whether to compute L2 unit-norm vectors for exact cosine similarity. |
 | `DATABASE_URL` | `postgresql+psycopg://...` | Connection URI for PostgreSQL with pgvector. |
 
 ---
@@ -210,11 +215,14 @@ Configured in `backend/.env` with safe fallbacks in `backend/app/core/config.py`
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `POST` | `/api/v1/documents` | Ingests a document (`.pdf`, `.docx`, `.txt`), validates magic bytes, extracts text, normalizes content, chunks deterministically, and persists to DB and local disk. |
-| `GET` | `/api/v1/documents` | Retrieves a paginated list of ingested documents (`skip`, `limit`, optional `status` filter). |
+| `POST` | `/api/v1/documents` | Ingests a document (`.pdf`, `.docx`, `.txt`), extracts text, normalizes content, chunks, generates 384d embeddings, and persists atomically. |
+| `GET` | `/api/v1/documents` | Retrieves a paginated list of ingested documents with chunk and embedding status. |
 | `GET` | `/api/v1/documents/{id}` | Retrieves metadata and processing metrics for a single document. (Storage paths are never exposed). |
-| `GET` | `/api/v1/documents/{id}/chunks` | Retrieves paginated chunks with provenance (`page_start`/`page_end` for PDF, paragraph index for DOCX/TXT). |
-| `DELETE` | `/api/v1/documents/{id}` | Permanently deletes the document record, cascades to all generated chunks, and removes the file from disk. |
+| `GET` | `/api/v1/documents/{id}/chunks` | Retrieves paginated chunks with provenance and vector embedding flags. |
+| `GET` | `/api/v1/documents/{id}/embeddings` | Retrieves embedding status, active model, and total embedded chunks for a document. |
+| `POST` | `/api/v1/documents/{id}/reembed` | Re-generates embeddings for all chunks of a document in-place without chunk duplication. |
+| `DELETE` | `/api/v1/documents/{id}` | Permanently deletes the document record, cascades to all generated chunks and vectors, and removes the file from disk. |
+| `GET` | `/api/v1/embeddings/info` | Reports active embedding model name, 384 dimensions, cosine metric, inference device, and max sequence length (512). |
 
 ### Health Check Endpoint
 
@@ -259,7 +267,7 @@ Probes API operational state, PostgreSQL connection, and pgvector extension avai
 | :---: | :--- | :---: |
 | **1** | **Project Architecture & Foundation** | **Completed** |
 | **2** | **Document Processing & Chunking Pipeline** | **Completed** |
-| 3 | Embedding Generation & pgvector Storage | Planned |
+| **3** | **Embedding Generation & pgvector Storage** | **Completed** |
 | 4 | Hybrid Retrieval Engine (Vector + BM25) | Planned |
 | 5 | Cross-Encoder Reranking & Context Compression | Planned |
 | 6 | Grounded RAG & Verifiable Citations | Planned |

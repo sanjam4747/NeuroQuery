@@ -7,6 +7,7 @@ from app.schemas.health import (
 )
 from app.schemas.document import DocumentResponse, DocumentListResponse
 from app.schemas.chunk import ChunkResponse, ChunkListResponse
+from app.schemas.embeddings import EmbeddingModelInfo, ReembedResponse
 
 __all__ = [
     "DatabaseHealth",
@@ -16,4 +17,6 @@ __all__ = [
     "DocumentListResponse",
     "ChunkResponse",
     "ChunkListResponse",
+    "EmbeddingModelInfo",
+    "ReembedResponse",
 ]

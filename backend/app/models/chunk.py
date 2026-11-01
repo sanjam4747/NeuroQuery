@@ -2,11 +2,12 @@
 
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Dict, Optional
-from sqlalchemy import DateTime, ForeignKey, Integer, Text, UniqueConstraint, func
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.types import JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from pgvector.sqlalchemy import Vector
 from app.db.base import Base
 
 if TYPE_CHECKING:
@@ -61,6 +62,21 @@ class Chunk(Base):
         default=dict,
         comment="Provenance metadata (e.g. section, paragraph index, char offsets)",
     )
+    embedding: Mapped[Optional[List[float]]] = mapped_column(
+        Vector(384),
+        nullable=True,
+        comment="384-dimensional dense semantic embedding vector (BAAI/bge-small-en-v1.5)",
+    )
+    embedding_model: Mapped[Optional[str]] = mapped_column(
+        String(100),
+        nullable=True,
+        comment="Identifier of the embedding model used, e.g. BAAI/bge-small-en-v1.5",
+    )
+    embedded_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="UTC timestamp when embedding was computed",
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -76,6 +92,11 @@ class Chunk(Base):
     __table_args__ = (
         UniqueConstraint("document_id", "chunk_index", name="uq_document_chunk_index"),
     )
+
+    @property
+    def has_embedding(self) -> bool:
+        """Indicates whether an embedding vector is present for this chunk."""
+        return self.embedding is not None
 
     def __repr__(self) -> str:
         return f"<Chunk id={self.id} doc={self.document_id} index={self.chunk_index} len={self.character_count}>"

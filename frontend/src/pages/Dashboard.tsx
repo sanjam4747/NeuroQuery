@@ -47,8 +47,8 @@ export const Dashboard: React.FC = () => {
     {
       title: 'Embeddings & pgvector Storage',
       phase: 'Phase 3',
-      description: 'Sentence-Transformers / OpenAI vector generation, HNSW cosine index persistence.',
-      status: 'planned',
+      description: 'Local BAAI/bge-small-en-v1.5 Sentence-Transformers (384d), L2 cosine normalization, and pgvector persistence.',
+      status: 'completed',
       category: 'Retrieval',
     },
     {
@@ -109,7 +109,7 @@ export const Dashboard: React.FC = () => {
           <div className="mt-6 flex flex-wrap items-center gap-4 text-xs font-mono text-slate-400">
             <div className="flex items-center gap-1.5 bg-white/5 px-2.5 py-1 rounded-md border border-white/10">
               <GitBranch className="w-3.5 h-3.5 text-brand-400" />
-              <span>Current: Phase 2 (Document Processing & Chunking)</span>
+              <span>Current: Phase 3 (Semantic Embeddings & Vector Storage)</span>
             </div>
             <div className="flex items-center gap-1.5 bg-white/5 px-2.5 py-1 rounded-md border border-white/10">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
@@ -200,7 +200,7 @@ export const Dashboard: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {plannedFeatures.map((feat) => {
             const isCompleted = feat.status === 'completed';
-            const isCurrent = feat.phase === 'Phase 2';
+            const isCurrent = feat.phase === 'Phase 3';
             return (
               <div
                 key={feat.phase}

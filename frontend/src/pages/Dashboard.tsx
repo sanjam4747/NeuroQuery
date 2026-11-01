@@ -54,8 +54,8 @@ export const Dashboard: React.FC = () => {
     {
       title: 'Hybrid Retrieval Engine',
       phase: 'Phase 4',
-      description: 'Dual-stream retrieval blending pgvector semantic similarity with PostgreSQL BM25 text search.',
-      status: 'planned',
+      description: 'Dual-stream retrieval blending pgvector semantic similarity with Lucene BM25 sparse search, RRF fusion, and Cross-Encoder reranking.',
+      status: 'completed',
       category: 'Retrieval',
     },
     {
@@ -109,7 +109,7 @@ export const Dashboard: React.FC = () => {
           <div className="mt-6 flex flex-wrap items-center gap-4 text-xs font-mono text-slate-400">
             <div className="flex items-center gap-1.5 bg-white/5 px-2.5 py-1 rounded-md border border-white/10">
               <GitBranch className="w-3.5 h-3.5 text-brand-400" />
-              <span>Current: Phase 3 (Semantic Embeddings & Vector Storage)</span>
+              <span>Current: Phase 4 (Hybrid Retrieval Engine & Relevance Evaluation)</span>
             </div>
             <div className="flex items-center gap-1.5 bg-white/5 px-2.5 py-1 rounded-md border border-white/10">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />

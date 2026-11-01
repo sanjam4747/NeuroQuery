@@ -42,7 +42,7 @@ describe('App Integration', () => {
     // Brand and hero checks
     expect(screen.getAllByText('NeuroQuery').length).toBeGreaterThan(0);
     expect(screen.getByText('Document Intelligence Platform')).toBeInTheDocument();
-    expect(screen.getByText('Current: Phase 3 (Semantic Embeddings & Vector Storage)')).toBeInTheDocument();
+    expect(screen.getByText('Current: Phase 4 (Hybrid Retrieval Engine & Relevance Evaluation)')).toBeInTheDocument();
 
     // Check navigation links
     expect(screen.getAllByText('Documents').length).toBeGreaterThan(0);

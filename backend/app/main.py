@@ -49,6 +49,8 @@ app.add_middleware(
 )
 
 
+from fastapi.encoders import jsonable_encoder
+
 # Standardized error handling
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
@@ -58,7 +60,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         content={
             "error": "Validation Error",
             "message": "The request payload or parameters failed validation.",
-            "details": exc.errors(),
+            "details": jsonable_encoder(exc.errors()),
         },
     )
 

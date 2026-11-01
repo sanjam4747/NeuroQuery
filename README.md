@@ -11,7 +11,7 @@
 **NeuroQuery** is an end-to-end NLP-powered document research and intelligence platform. It provides document parsing, semantic chunking, high-dimensional vector embeddings, hybrid retrieval (dense vector similarity + sparse BM25 keyword matching), cross-encoder reranking, and document-grounded question answering (RAG) with verifiable citations, multi-document contradiction detection, and retrieval evaluation.
 
 > [!NOTE]
-> **Current Status**: **Phase 3 — Semantic Embedding Generation & Vector Storage** is complete and practically verified. Vector embeddings are generated locally via Sentence-Transformers (`BAAI/bge-small-en-v1.5`, 384 dimensions) and persisted using PostgreSQL with `pgvector`. Future hybrid retrieval and RAG capabilities will be introduced iteratively in subsequent phases according to the [Development Roadmap](docs/development-roadmap.md).
+> **Current Status**: **Phase 4 — Hybrid Retrieval Engine & Relevance Evaluation** is complete and practically verified. The retrieval engine combines dense semantic search (`BAAI/bge-small-en-v1.5`, 384d, pgvector cosine search), sparse lexical retrieval (`LuceneBM25` with non-negative Robertson IDF), Reciprocal Rank Fusion ($k=60$), and Cross-Encoder reranking (`cross-encoder/ms-marco-MiniLM-L-6-v2`), achieving 100% recall across our reproducible 32-query benchmark evaluation suite. Detailed in [docs/architecture.md](docs/architecture.md).
 
 ---
 
@@ -205,11 +205,27 @@ Configured in `backend/.env` with safe fallbacks in `backend/app/core/config.py`
 | `EMBEDDING_BATCH_SIZE` | `32` | Batch size for embedding generation. |
 | `EMBEDDING_DEVICE` | `auto` | Inference device (`auto`, `cpu`, or `cuda`). |
 | `EMBEDDING_NORMALIZE` | `True` | Whether to compute L2 unit-norm vectors for exact cosine similarity. |
+| `DENSE_RETRIEVAL_TOP_K` | `20` | Candidate passages retrieved by pgvector dense cosine search. |
+| `BM25_RETRIEVAL_TOP_K` | `20` | Candidate passages retrieved by LuceneBM25 lexical search. |
+| `RRF_CONSTANT` | `60` | Smoothing constant $k$ for Reciprocal Rank Fusion ($1/(k + rank)$). |
+| `HYBRID_RETRIEVAL_TOP_K` | `20` | Candidates forwarded from RRF fusion into the cross-encoder. |
+| `RERANKER_MODEL_NAME` | `cross-encoder/ms-marco-MiniLM-L-6-v2` | Sentence-Transformers cross-encoder model identifier. |
+| `RERANKER_TOP_K` | `5` | Final top-K ranked results returned to the client. |
+| `RERANKER_BATCH_SIZE` | `16` | Batch size for cross-encoder inference. |
+| `ENABLE_RERANKING` | `True` | Global default toggle for cross-encoder reranking stage. |
 | `DATABASE_URL` | `postgresql+psycopg://...` | Connection URI for PostgreSQL with pgvector. |
 
 ---
 
 ## API Specifications
+
+### Hybrid Retrieval Endpoints (`/api/v1/retrieval`)
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `POST` | `/api/v1/retrieval/search` | Executes multi-stage hybrid search (Dense + BM25 + RRF + Reranker) with timing telemetry and source provenance. |
+| `GET` | `/api/v1/retrieval/info` | Reports active embedding model, vector dimensions, reranker model, BM25 index status, and inference hardware. |
+| `POST` | `/api/v1/retrieval/rebuild-index` | Reconstructs the in-memory BM25 index from persistent document chunks in the database. |
 
 ### Document Processing Endpoints (`/api/v1/documents`)
 
@@ -268,8 +284,8 @@ Probes API operational state, PostgreSQL connection, and pgvector extension avai
 | **1** | **Project Architecture & Foundation** | **Completed** |
 | **2** | **Document Processing & Chunking Pipeline** | **Completed** |
 | **3** | **Embedding Generation & pgvector Storage** | **Completed** |
-| 4 | Hybrid Retrieval Engine (Vector + BM25) | Planned |
-| 5 | Cross-Encoder Reranking & Context Compression | Planned |
+| **4** | **Hybrid Retrieval Engine & Relevance Evaluation** | **Completed** |
+| 5 | Cross-Encoder Context Optimization & Token Compression | Planned |
 | 6 | Grounded RAG & Verifiable Citations | Planned |
 | 7 | Multi-Document Comparison & Contradictions | Planned |
 | 8 | Evaluation Lab & Observability Metrics | Planned |

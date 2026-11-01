@@ -74,6 +74,19 @@ class Settings(BaseSettings):
     EMBEDDING_DEVICE: str = "auto"  # "auto" (detects CUDA or falls back to CPU), "cpu", "cuda"
     EMBEDDING_NORMALIZE: bool = True  # L2 normalization for unit-vector cosine similarity
 
+    # Hybrid Retrieval & Relevance Settings (Phase 4)
+    DENSE_RETRIEVAL_TOP_K: int = 20
+    BM25_RETRIEVAL_TOP_K: int = 20
+    RRF_CONSTANT: int = 60
+    HYBRID_RETRIEVAL_TOP_K: int = 20
+    RERANKER_TOP_K: int = 5
+    RERANKER_MODEL_NAME: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    RERANKER_BATCH_SIZE: int = 16
+    RERANKER_DEVICE: str = "auto"  # "auto", "cpu", "cuda"
+    ENABLE_RERANKING: bool = True
+    DENSE_SIMILARITY_THRESHOLD: Union[float, None] = None  # None = disabled
+
+
 
     def get_storage_path(self) -> Path:
         """Resolve storage path safely and ensure target directory exists."""

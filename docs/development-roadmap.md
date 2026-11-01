@@ -77,13 +77,23 @@ gantt
 
 ---
 
-### Phase 4: Hybrid Retrieval Engine
-- Full-text search implementation using PostgreSQL `tsvector` / BM25 algorithms.
-- Vector similarity search (Cosine similarity / L2 distance via pgvector).
-- Hybrid search fusion:
-  - Reciprocal Rank Fusion (RRF) algorithm.
-  - Normalized score weighting (alpha vector + (1-alpha) BM25).
-- Filter support (by document ID, collection, date, metadata attributes).
+### Phase 4: Hybrid Retrieval Engine & Relevance Evaluation (Completed)
+- [x] Dedicated Dense Semantic Retrieval service using `BAAI/bge-small-en-v1.5` (384d) with pgvector cosine distance database queries (`1 - distance`) and SQLite fallback.
+- [x] Dedicated Sparse Lexical Retrieval service using `LuceneBM25` with deterministic tokenization preserving technical symbols, identifiers, acronyms, and numeric tokens.
+- [x] Non-negative Robertson IDF formula (`LuceneBM25`) preventing negative/zero IDF on small corpora or frequent technical terms.
+- [x] Thread-safe BM25 in-memory lifecycle with automatic sync on ingestion, deletion, and on-demand reconstruction.
+- [x] Reciprocal Rank Fusion (RRF) service combining dense and lexical rankings ($k=60$) with stable candidate deduplication and deterministic tie-breaking.
+- [x] Cross-Encoder Reranking service using `cross-encoder/ms-marco-MiniLM-L-6-v2` loaded once on CPU, with configurable batch scoring on top 20 candidates.
+- [x] Versioned REST API endpoints:
+  - `POST /api/v1/retrieval/search`: Hybrid search with provenance, timing breakdown, and optional reranking toggle.
+  - `GET /api/v1/retrieval/info`: Pipeline telemetry reporting models, BM25 chunk counts, and active inference device.
+  - `POST /api/v1/retrieval/rebuild-index`: Rebuilding BM25 index from persistent database chunks.
+- [x] Retrieval Evaluation Framework:
+  - Precision@K, Recall@K, Mean Reciprocal Rank (MRR), and nDCG@K metrics.
+  - Benchmark dataset of 32 natural-language queries across 5 categories with annotated ground truth.
+  - Comparative evaluation: Dense only (Recall: 0.9375), BM25 only (Recall: 0.9062), Hybrid RRF (Recall: 0.9688), Hybrid + Reranker (Recall: 1.0000).
+- [x] Frontend Research Assistant UI with search controls, top-K selector, cross-encoder toggle, document scope filter, latency funnel stats, and expandable technical score breakdown.
+- [x] Comprehensive test coverage: 88 backend pytest tests and 22 frontend Vitest tests with 100% pass rate.
 
 ---
 

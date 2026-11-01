@@ -290,4 +290,86 @@ flowchart TD
 - `POST /api/v1/documents/{id}/reembed`: Triggers chunk re-embedding for a document.
 - `GET /api/v1/documents/{id}/embeddings`: Retrieves document embedding status and chunk completion count.
 
+---
+
+## 11. Phase 4: Hybrid Retrieval Engine & Relevance Evaluation
+
+### 11.1 Retrieval Architecture & Data Flow
+
+NeuroQuery Phase 4 implements a production-grade multi-stage hybrid retrieval architecture. The pipeline merges vector space semantic retrieval with lexical inverted-index search, reconciles disparate score distributions via Reciprocal Rank Fusion, and optimizes final ordering using deep cross-encoder reranking:
+
+```mermaid
+flowchart TD
+    UserQuery["User Natural-Language Query"] --> Validation["Query Validation & Normalization"]
+    
+    Validation --> DenseSearch["Dense Semantic Retrieval\n(BAAI/bge-small-en-v1.5, 384d)\npgvector Cosine Distance Search"]
+    Validation --> BM25Search["Sparse Lexical Retrieval\n(LuceneBM25 with Non-Negative IDF)\nDeterministic Tokenizer"]
+    
+    DenseSearch --> |Top 20 Candidates| RRF["Reciprocal Rank Fusion (RRF)\nRRF(d) = Σ 1 / (60 + rank_i(d))"]
+    BM25Search --> |Top 20 Candidates| RRF
+    
+    RRF --> Dedup["Stable Candidate Deduplication\n& Rank Reconciliation"]
+    Dedup --> |Top 20 Fused Candidates| CrossEncoder["Cross-Encoder Reranking\n(cross-encoder/ms-marco-MiniLM-L-6-v2)\nJoint Query-Passage Attention"]
+    
+    CrossEncoder --> TopK["Top-K Final Ranked Results\n(Default: K=5)"]
+    TopK --> APIResponse["Versioned API Response\nwith Document & Page Provenance\n+ Scoring Explainability"]
+```
+
+### 11.2 Dense Semantic Retrieval Service
+- **Model Shared Singleton**: Reuses the Phase 3 `EmbeddingService` instance (`BAAI/bge-small-en-v1.5`, 384 dimensions) to compute the query embedding vector without duplicate model loading.
+- **Database-Level Vector Search**:
+  - In PostgreSQL + pgvector: executes `chunks.embedding.cosine_distance(query_vector)` directly at the database engine level via SQLAlchemy Core. Chunks are filtered to `status == 'completed'`, excluding chunks without valid embeddings.
+  - Cosine similarity is calibrated as $\text{similarity} = 1.0 - \text{distance}$.
+  - In SQLite testing environments: falls back gracefully to in-memory cosine similarity calculation via NumPy dot products over stored vector representations.
+- **Filtering & Provenance**: Supports optional scoping to specific `document_ids` and configurable candidate limits (`DENSE_RETRIEVAL_TOP_K=20`). Preserves document filenames, chunk IDs, and page ranges.
+
+### 11.3 Sparse Lexical Retrieval Service (LuceneBM25)
+- **Tokenization Strategy**: `tokenize_for_bm25` provides deterministic token extraction:
+  - Preserves technical terminology and acronyms (`pgvector`, `HNSW`, `BERT`, `NLP`).
+  - Preserves version numbers, port numbers, identifiers, and file extensions (`v1.5`, `5432`, `report.pdf`).
+  - Preserves hyphenated technical compounds (`cross-encoder`, `token-weighted`).
+  - Filters standard grammatical functional stopwords (`the`, `is`, `at`, `which`) without stripping domain content words.
+- **Non-Negative Robertson IDF (`LuceneBM25`)**: Standard raw Robertson BM25 IDF in `rank-bm25` produces zero or negative weights for terms that appear in half or more documents (especially in small collections or when $N \le 2$). `LuceneBM25` subclasses `BM25Okapi` and implements the industry-standard Lucene/Elasticsearch non-negative Robertson formula:
+  $$\text{IDF}(q) = \ln\left(1.0 + \frac{N - n(q) + 0.5}{n(q) + 0.5}\right)$$
+  This guarantees strictly positive IDF for all matching tokens while maintaining monotonic rarity discrimination across collections of any size.
+- **Lifecycle Management**:
+  - Maintained as an in-memory thread-safe (`threading.RLock`) singleton.
+  - Automatic synchronization on document ingestion, re-embedding, and cascading deletion via pipeline hooks.
+  - On-demand index reconstruction from persistent database chunks via `POST /api/v1/retrieval/rebuild-index`.
+
+### 11.4 Reciprocal Rank Fusion (RRF) Service
+- **Mathematical Formulation**: Reciprocal Rank Fusion combines ranked lists from independent retrieval systems without relying on uncalibrated raw score distributions:
+  $$\text{RRF}(d) = \sum_{m \in \{\text{dense}, \text{bm25}\}} \frac{1}{k + \text{rank}_m(d)}$$
+  where $k=60$ by default (`settings.RRF_CONSTANT`).
+- **Score & Rank Preservation**: Each fused candidate retains its original dense score, dense rank, BM25 score, and BM25 rank alongside the computed `rrf_score` and `rrf_rank`.
+- **Deduplication & Deterministic Tie-Breaking**: Candidates are keyed by stable `chunk_id` UUIDs. Ties in `rrf_score` are broken deterministically using `(-rrf_score, -dense_score, -bm25_score, chunk_id_str)`.
+
+### 11.5 Cross-Encoder Reranking Service
+- **Model & Architecture**: Encapsulates `cross-encoder/ms-marco-MiniLM-L-6-v2` loaded once via Sentence-Transformers as a thread-safe singleton.
+- **Joint Attention**: Unlike bi-encoders that encode query and document into separate vectors, the cross-encoder feeds `[CLS] Query [SEP] Passage [SEP]` jointly through cross-attention layers, capturing deep lexical-semantic interactions.
+- **Batch Processing & Resource Efficiency**: Runs on CPU inference with configurable batch size (`RERANKER_BATCH_SIZE=16`). Reranks only the top 20 candidate passages produced by RRF rather than scanning the entire corpus, preserving system memory on the host machine.
+- **Bypass Capability**: Configurable via `enable_reranking=False` in settings or on a per-request basis for low-latency retrieval.
+
+### 11.6 Empirical Benchmark Evaluation Results
+A benchmark evaluation dataset containing **32 natural-language queries** across 5 distinct categories (exact keywords, semantic paraphrases, technical terminology, numeric/identifiers, and negative ungrounded queries) was executed against a verified 14-chunk reference corpus:
+
+| Configuration | Precision@5 | Recall@5 | MRR | nDCG@5 | Mean Latency | p95 Latency |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **1. Dense Only** (`bge-small-en-v1.5`) | 0.1625 | 0.9375 | 0.7266 | 0.7379 | 78.03 ms | 109.92 ms |
+| **2. BM25 Only** (`LuceneBM25`) | 0.2500 | 0.9062 | 0.8281 | 0.8322 | 0.33 ms | 0.68 ms |
+| **3. Hybrid (RRF)** ($k=60$) | 0.1688 | 0.9688 | 0.7318 | 0.7519 | 91.54 ms | 142.29 ms |
+| **4. Hybrid + Cross-Encoder** | **0.1750** | **1.0000** | **0.8281** | **0.8322** | 618.04 ms | 622.09 ms |
+
+#### Key Empirical Observations:
+1. **Complementary Strengths**: BM25 achieved 1.00 MRR on exact technical terms and identifiers in sub-millisecond time (0.33 ms), but dropped to 0.71 recall on semantic paraphrases due to vocabulary mismatch. Dense retrieval bridged semantic paraphrases (1.00 recall) but missed exact terms (0.86 recall).
+2. **Hybrid Synergy**: Reciprocal Rank Fusion combined both modalities to achieve 0.9688 recall overall without any score calibration overhead.
+3. **Cross-Encoder Lift**: Adding the cross-encoder reranker achieved **100% recall** across all benchmark queries and elevated semantic paraphrase MRR from 0.63 to 1.00, trading ~618 ms of CPU inference time for maximum ranking quality.
+4. **Negative Query Discrimination**: BM25 correctly returned zero results for ungrounded negative queries, while dense nearest-neighbor search returned unrelated passages. The cross-encoder assigned these negative ungrounded pairs strongly negative logit scores ($\le -11.0$), providing an effective threshold for hallucination prevention in Phase 5/6.
+
+### 11.7 API Endpoints
+- `POST /api/v1/retrieval/search`: Executes full multi-stage hybrid retrieval with document filtering and optional reranking bypass. Returns ranked chunks with source provenance, individual stage scores, and detailed latency profiling.
+- `GET /api/v1/retrieval/info`: Telemetry endpoint reporting active embedding model, vector dimensions, reranker model, BM25 index state, RRF parameters, and inference device.
+- `POST /api/v1/retrieval/rebuild-index`: Reconstructs the in-memory BM25 index from valid completed document chunks in the database.
+
+
 

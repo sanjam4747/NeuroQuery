@@ -8,6 +8,14 @@ from app.schemas.health import (
 from app.schemas.document import DocumentResponse, DocumentListResponse
 from app.schemas.chunk import ChunkResponse, ChunkListResponse
 from app.schemas.embeddings import EmbeddingModelInfo, ReembedResponse
+from app.schemas.retrieval import (
+    RetrievalQueryRequest,
+    RetrievedChunkResult,
+    RetrievalMetadata,
+    RetrievalQueryResponse,
+    RetrievalInfoResponse,
+    RebuildIndexResponse,
+)
 
 __all__ = [
     "DatabaseHealth",
@@ -19,4 +27,11 @@ __all__ = [
     "ChunkListResponse",
     "EmbeddingModelInfo",
     "ReembedResponse",
+    "RetrievalQueryRequest",
+    "RetrievedChunkResult",
+    "RetrievalMetadata",
+    "RetrievalQueryResponse",
+    "RetrievalInfoResponse",
+    "RebuildIndexResponse",
 ]
+

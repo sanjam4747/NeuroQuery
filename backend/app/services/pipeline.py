@@ -14,6 +14,8 @@ from app.services.extractors import get_extractor, ExtractedDocument, ExtractedU
 from app.services.preprocessing import normalize_text
 from app.services.chunker import chunker_service
 from app.services.embeddings import embedding_service
+from app.services.bm25_retrieval import bm25_service
+
 
 
 class DocumentProcessingPipeline:
@@ -153,6 +155,13 @@ class DocumentProcessingPipeline:
 
             db.commit()
             db.refresh(doc)
+
+            # Synchronize newly created chunks with in-memory BM25 index
+            try:
+                bm25_service.add_document_chunks(chunk_records, doc.filename)
+            except Exception as bm25_err:
+                logger.warning("Failed to incrementally add chunks to BM25 index: %s", bm25_err)
+
             logger.info(
                 "Successfully ingested document %s (%d chunks, %d embedded in %.1f ms)",
                 doc.original_filename,
@@ -231,6 +240,13 @@ class DocumentProcessingPipeline:
 
             db.commit()
             db.refresh(doc)
+
+            # Synchronize updated chunks with in-memory BM25 index
+            try:
+                bm25_service.add_document_chunks(chunks, doc.filename)
+            except Exception as bm25_err:
+                logger.warning("Failed to refresh chunks in BM25 index: %s", bm25_err)
+
             logger.info(
                 "Successfully re-embedded document %s (%d chunks in %.1f ms)",
                 doc.original_filename,
@@ -250,8 +266,15 @@ class DocumentProcessingPipeline:
     def delete_document(self, db: Session, document: Document) -> None:
         """Deletes a document from the database (cascading chunks) and removes stored file."""
         storage_path = document.storage_path
+        doc_id = document.id
         db.delete(document)
         db.commit()
+
+        # Evict deleted document chunks from BM25 index
+        try:
+            bm25_service.remove_document_chunks(doc_id)
+        except Exception as bm25_err:
+            logger.warning("Failed to evict document %s chunks from BM25 index: %s", doc_id, bm25_err)
 
         # Delete physical file
         removed = storage_service.delete_file(storage_path)
@@ -259,10 +282,11 @@ class DocumentProcessingPipeline:
             logger.warning(
                 "Physical file %s could not be found or unlinked during deletion of document %s",
                 storage_path,
-                document.id,
+                doc_id,
             )
         else:
-            logger.info("Deleted document %s and removed storage file %s", document.id, storage_path)
+            logger.info("Deleted document %s and removed storage file %s", doc_id, storage_path)
+
 
 
 pipeline_service = DocumentProcessingPipeline()
